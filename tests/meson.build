@@ -39,5 +39,5 @@ test_fullduplex = executable(
 test('modem', test_modem)
 test('baseband_modem', test_baseband_modem)
 test('passband_modem', test_passband_modem)
-test('integration', test_integration)
-test('fullduplex', test_fullduplex)
+test('integration', test_integration, is_parallel : false)
+test('fullduplex', test_fullduplex, is_parallel : false)
