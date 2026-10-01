@@ -80,7 +80,7 @@ void Channel::stream() {
             // Transmissor fechou a conexão
             if (!n) {
               fds[i].fd = -1;
-              break;
+              continue;
             }
 
             signal.resize(n);
