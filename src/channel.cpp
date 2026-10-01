@@ -57,11 +57,10 @@ void Channel::open() {
 }
 
 void Channel::stream() {
-  bool run = true;
   bytes signal(BUF_SIZE);
 
   try {
-    while (run) {
+    while (true) {
       // Aguarda por algum transceptor estar pronto para enviar dados
       int ev = poll(fds, 3, 100);
       check_err(ev, "Erro durante polling no canal.");

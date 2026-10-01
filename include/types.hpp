@@ -22,9 +22,6 @@ template <size_t n> using IQ_map = std::pair<char, IQ_coord>[n];
 
 constexpr struct sockaddr_un channel = {AF_UNIX, "/tmp/channel.sock"};
 
-constexpr struct sockaddr_un channelIn = {AF_UNIX, "/tmp/channel_in.sock"};
-constexpr struct sockaddr_un channelOut = {AF_UNIX, "/tmp/channel_out.sock"};
-
 } // namespace PhysicalLayer
 
 #endif
