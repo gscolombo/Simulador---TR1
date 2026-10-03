@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <sys/types.h>
 #include <vector>
@@ -14,6 +15,8 @@ Modem::Modem(size_t symbol_size, size_t sample_size, double bitrate, double A)
     : symbol_size(symbol_size), sample_size(sample_size), bitrate(bitrate),
       A(A) {
   baud = bitrate / (double)(symbol_size);
+  k = sample_size * 10;
+  means = (double *)malloc(sizeof(double) * k);
 }
 
 void Modem::toVolts(const bytes &data, bytes &volts) {
@@ -88,6 +91,7 @@ void Modem::fromVolts(const bytes &volts, bytes &data) {
 
     // Demodula o conjunto de doubles no símbolo correspondente
     s.clear();
+    estimate_df_offset(sample);
     demodulate(sample, s);
     assert(s.size() == symbol_size);
 
@@ -143,6 +147,24 @@ double Modem::cross_correlation(const signal_sample &g,
   return rho / sqrt(Eg * Ex);
 }
 
+void Modem::estimate_df_offset(const signal_sample &sample) {
+  double m = 0;
+  for (double s : sample)
+    m += s;
+  m /= sample.size();
+
+  dc_offset = means_counter ? running_sum / means_counter : 0.;
+
+  if (means_counter == k)
+    running_sum -= means[m0];
+  else
+    means_counter++;
+
+  means[m0] = m;
+  m0 = (m0 + 1) % k;
+  running_sum += m;
+}
+
 /* Modems banda-base (NRZ Polar, Manchester e Bipolar) */
 
 /* ===== NRZ ===== */
@@ -168,7 +190,7 @@ void NRZPolarModem::demodulate(signal_sample &sample, symbol &s) const {
     mean += s;
   mean /= sample.size();
 
-  s.push_back(mean > 0. ? 1 : 0);
+  s.push_back(mean > dc_offset ? 1 : 0);
 };
 
 /* ===== Manchester ===== */
@@ -194,11 +216,13 @@ void ManchesterModem::modulate(symbol &s, signal_sample &sample) const {
 void ManchesterModem::demodulate(signal_sample &sample, symbol &s) const {
   assert(sample.size() == sample_size);
 
-  signal_sample pulse;
-  for (size_t i = 0; i < sample_size; i++)
-    pulse.push_back(((sample[i] > 0.5) ^ clock[i]) * A);
+  double pulse_mean = 0;
 
-  s.push_back(signal_energy(pulse) * baud > 0.5 * A);
+  for (size_t i = 0; i < sample_size; i++)
+    pulse_mean += ((bit)(sample[i] > dc_offset) ^ clock[i]);
+  pulse_mean /= sample_size;
+
+  s.push_back((bit)(pulse_mean > 0.5));
 }
 
 /* ===== Bipolar ===== */
@@ -214,7 +238,12 @@ void BipolarModem::modulate(symbol &s, signal_sample &sample) const {
 void BipolarModem::demodulate(signal_sample &sample, symbol &s) const {
   assert(sample.size() == sample_size);
 
-  s.push_back(signal_energy(sample) * baud > 0.5 ? 1 : 0);
+  double m = 0;
+  for (double s : sample)
+    m += s;
+  m /= sample.size();
+
+  s.push_back((fabs(m - dc_offset)) > 0.5 ? 1 : 0);
 }
 
 /* =================== */
@@ -274,6 +303,9 @@ void ASKModem::modulate(symbol &s, signal_sample &sample) const {
 
 void ASKModem::demodulate(signal_sample &sample, symbol &s) const {
   assert(sample.size() == sample_size);
+
+  for (double *s = sample.data(); s != sample.data() + sample.size(); s++)
+    *s -= dc_offset;
 
   double p = signal_energy(sample) * baud;
 

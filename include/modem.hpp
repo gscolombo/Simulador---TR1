@@ -34,14 +34,21 @@ protected:
   double cross_correlation(const signal_sample &g,
                            const signal_sample &x) const;
   double signal_energy(const signal_sample &y) const;
+  void estimate_df_offset(const signal_sample &sample);
 
   virtual void modulate(symbol &s, signal_sample &sample) const = 0;
   virtual void demodulate(signal_sample &sample, symbol &s) const = 0;
+
+  double dc_offset = 0;
 
 private:
   uint8_t rx_bits;
   uint64_t rx_acc;
   bytes sig_buf;
+
+  int k;
+  double *means, running_sum = 0;
+  int means_counter = 0, m0 = 0;
 };
 
 class NRZPolarModem : public Modem {
@@ -83,6 +90,7 @@ public:
 
 private:
   mutable bool positive = false;
+
   void modulate(symbol &s, signal_sample &sample) const override;
   void demodulate(signal_sample &sample, symbol &s) const override;
 };
