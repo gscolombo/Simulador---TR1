@@ -15,8 +15,8 @@ public:
     return std::make_shared<TestModem>(*this);
   }
 
-  double test_cross_correlation(signal_sample g, signal_sample x) {
-    return cross_correlation(g, x);
+  double test_signal_correlation(signal_sample g, signal_sample x) {
+    return signal_correlation(g, x);
   }
 
 protected:
@@ -116,7 +116,7 @@ TEST_CASE("Modem::toVolts agrupa bits em símbolos e gera `sample_size` "
         g.push_back(static_cast<double>(t) * 1.37 -
                     5.0); // sinal arbitrário, não trivial
 
-      CHECK(modem.test_cross_correlation(g, g) ==
+      CHECK(modem.test_signal_correlation(g, g) ==
             doctest::Approx(1.).epsilon(e));
     }
 
@@ -129,7 +129,7 @@ TEST_CASE("Modem::toVolts agrupa bits em símbolos e gera `sample_size` "
       for (size_t t = 0; t < sample_size; t++)
         x.push_back(static_cast<double>(t) - mean);
 
-      CHECK(modem.test_cross_correlation(g, x) ==
+      CHECK(modem.test_signal_correlation(g, x) ==
             doctest::Approx(0.).epsilon(e));
     }
 
@@ -142,7 +142,7 @@ TEST_CASE("Modem::toVolts agrupa bits em símbolos e gera `sample_size` "
       for (double v : g)
         x.push_back(-v);
 
-      CHECK(modem.test_cross_correlation(g, x) ==
+      CHECK(modem.test_signal_correlation(g, x) ==
             doctest::Approx(-1.).epsilon(e));
     }
   }

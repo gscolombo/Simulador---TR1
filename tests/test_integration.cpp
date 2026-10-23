@@ -184,11 +184,10 @@ TEST_CASE("Transmissão e recepção de mensagem em canal perfeito") {
 
   SUBCASE("Modems banda base") {
     modems.push_back(
-        {"NRZ Polar", std::make_shared<NRZPolarModem>(1, 100, 1e3, 2.)});
+        {"NRZ Polar", std::make_shared<NRZPolarModem>(100, 1e3, 2.)});
     modems.push_back(
-        {"Manchester", std::make_shared<ManchesterModem>(1, 100, 1e3, 2.)});
-    modems.push_back(
-        {"Bipolar", std::make_shared<BipolarModem>(1, 100, 1e3, 2.)});
+        {"Manchester", std::make_shared<ManchesterModem>(100, 1e3, 2.)});
+    modems.push_back({"Bipolar", std::make_shared<BipolarModem>(100, 1e3, 2.)});
 
     test();
 
@@ -196,12 +195,12 @@ TEST_CASE("Transmissão e recepção de mensagem em canal perfeito") {
   }
 
   SUBCASE("Modems banda passante") {
+    modems.push_back({"ASK", std::make_shared<ASKModem>(4e3, 100e3, 500, 2.)});
     modems.push_back(
-        {"ASK", std::make_shared<ASKModem>(1, 4e3, 100e3, 500, 2.)});
+        {"FSK", std::make_shared<FSKModem>(4e3, 100e3, 500, 2., 10e3)});
     modems.push_back(
-        {"FSK", std::make_shared<FSKModem>(1, 4e3, 100e3, 500, 2., 10e3)});
-    modems.push_back(
-        {"8PSK", std::make_shared<_8PSKModem>(3, 4e3, 100e3, 500, 2.)});
+        {"8PSK", std::make_shared<_8PSKModem>(4e3, 100e3, 500, 2.)});
+    modems.push_back({"32-QAM", std::make_shared<_32QAM>(4e3, 100e3, 500, 2.)});
 
     test();
 

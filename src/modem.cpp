@@ -132,19 +132,27 @@ double Modem::signal_energy(const signal_sample &y) const {
   return E;
 }
 
-double Modem::cross_correlation(const signal_sample &g,
-                                const signal_sample &x) const {
+double Modem::projection_coefficient(const signal_sample &g,
+                                     const signal_sample &x) const {
   assert(g.size() == x.size());
 
-  double Eg = signal_energy(g);
   double Ex = signal_energy(x);
-  double rho = 0.;
+  double p = 0.;
   double dt = 1. / (this->sample_size * this->baud);
 
   for (size_t n = 0; n < g.size(); n++)
-    rho += g[n] * x[n] * dt;
+    p += g[n] * x[n] * dt;
 
-  return rho / sqrt(Eg * Ex);
+  return p / Ex; // <g(t),x(t)>/||x(t)||²
+}
+
+double Modem::signal_correlation(const signal_sample &g,
+                                 const signal_sample &x) const {
+  double Ex = signal_energy(x);
+  double Eg = signal_energy(g);
+
+  return projection_coefficient(g, x) *
+         sqrt(Ex / Eg); // <g(t),x(t)>/(||g(t)|| * ||x(t)||)
 }
 
 void Modem::estimate_df_offset(const signal_sample &sample) {
@@ -166,6 +174,8 @@ void Modem::estimate_df_offset(const signal_sample &sample) {
 }
 
 /* Modems banda-base (NRZ Polar, Manchester e Bipolar) */
+BasebandModem::BasebandModem(size_t sample_size, double bitrate, double A)
+    : Modem(1, sample_size, bitrate, A) {}
 
 /* ===== NRZ ===== */
 
@@ -195,9 +205,8 @@ void NRZPolarModem::demodulate(signal_sample &sample, symbol &s) const {
 
 /* ===== Manchester ===== */
 
-ManchesterModem::ManchesterModem(size_t symbol_size, size_t sample_size,
-                                 double bitrate, double A)
-    : Modem(symbol_size, sample_size, bitrate, A) {
+ManchesterModem::ManchesterModem(size_t sample_size, double bitrate, double A)
+    : BasebandModem(sample_size, bitrate, A) {
   assert(sample_size % 2 == 0);
 
   // Inicializa amostra de sinal de clock
@@ -273,11 +282,8 @@ PassbandModem::PassbandModem(size_t symbol_size, size_t sample_size, double fc,
   assert(fc >= baud * 10.);
 }
 
-ASKModem::ASKModem(size_t symbol_size, size_t sample_size, double fc,
-                   double bitrate, double A)
-    : PassbandModem(symbol_size, sample_size, fc, bitrate, A) {
-  assert(symbol_size == 1);
-
+ASKModem::ASKModem(size_t sample_size, double fc, double bitrate, double A)
+    : PassbandModem(1, sample_size, fc, bitrate, A) {
   // Calcula o sinal da portadora
   for (size_t n = 0; n < sample_size; n++) {
     double t = (double)n / (sample_size * baud);
@@ -312,10 +318,9 @@ void ASKModem::demodulate(signal_sample &sample, symbol &s) const {
   s.push_back((bit)(p > threshold));
 };
 
-FSKModem::FSKModem(size_t symbol_size, size_t sample_size, double fc,
-                   double bitrate, double A, double fd)
-    : PassbandModem(symbol_size, sample_size, fc, bitrate, A), fd(fd) {
-  assert(symbol_size == 1);
+FSKModem::FSKModem(size_t sample_size, double fc, double bitrate, double A,
+                   double fd)
+    : PassbandModem(1, sample_size, fc, bitrate, A), fd(fd) {
   /*
     Calcula as portadoras de frequências fc ± fd
   */
@@ -342,20 +347,19 @@ void FSKModem::modulate(symbol &s, signal_sample &signal) const {
 void FSKModem::demodulate(signal_sample &sample, symbol &s) const {
   assert(sample.size() == sample_size);
 
-  double p1 = cross_correlation(f1_carrier, sample);
-  double p2 = cross_correlation(f2_carrier, sample);
+  double p1 = signal_correlation(f1_carrier, sample);
+  double p2 = signal_correlation(f2_carrier, sample);
 
   s.push_back((bit)(p2 >= p1));
 }
 
-_8PSKModem::_8PSKModem(size_t symbol_size, size_t sample_size, double fc,
-                       double bitrate, double A)
-    : PassbandModem(symbol_size, sample_size, fc, bitrate, A),
-      constellation_map{{0b000, {1., 0.}},  {0b001, {inv_sqrt2, inv_sqrt2}},
-                        {0b101, {0., 1}},   {0b100, {-inv_sqrt2, inv_sqrt2}},
-                        {0b110, {-1., 0.}}, {0b111, {-inv_sqrt2, -inv_sqrt2}},
-                        {0b011, {0., -1}},  {0b010, {inv_sqrt2, -inv_sqrt2}}} {
+QAM::QAM(size_t symbol_size, size_t sample_size, double fc, double bitrate,
+         double A)
+    : PassbandModem(symbol_size, sample_size, fc, bitrate, A) {
+  set_IQ_signals();
+}
 
+void QAM::set_IQ_signals() {
   for (size_t n = 0; n < sample_size; n++) {
     double ang = 2 * PI * fc * ((double)n / (sample_size * baud));
     I.push_back(A * cos(ang));
@@ -363,12 +367,12 @@ _8PSKModem::_8PSKModem(size_t symbol_size, size_t sample_size, double fc,
   }
 }
 
-void _8PSKModem::modulate(symbol &s, signal_sample &sample) const {
-  assert(s.size() == 3);
+void QAM::modulate(symbol &s, signal_sample &sample) const {
+  assert(s.size() == symbol_size);
 
   char o = 0b000;
 
-  for (char i = 0; i < 3; i++) {
+  for (size_t i = 0; i < symbol_size; i++) {
     char b = s[i];
     assert(b == 0 || b == 1);
     o |= b << i;
@@ -386,19 +390,19 @@ void _8PSKModem::modulate(symbol &s, signal_sample &sample) const {
   }
 }
 
-void _8PSKModem::demodulate(signal_sample &sample, symbol &s) const {
+void QAM::demodulate(signal_sample &sample, symbol &s) const {
   assert(sample.size() == sample_size);
 
-  double pi = cross_correlation(sample, I);
-  double pq = cross_correlation(sample, Q);
+  double pi = projection_coefficient(sample, I);
+  double pq = projection_coefficient(sample, Q);
 
   auto dist = [](IQ_coord a, IQ_coord b) {
     return sqrt(pow(a.first - b.first, 2) + pow(a.second - b.second, 2));
   };
 
-  auto set_symbol = [&s](char _s) {
+  auto set_symbol = [&s, this](char _s) {
     s.clear();
-    for (char i = 0; i < 3; i++)
+    for (size_t i = 0; i < this->symbol_size; i++)
       s.push_back((_s >> i) & 0b001);
   };
 
@@ -410,4 +414,52 @@ void _8PSKModem::demodulate(signal_sample &sample, symbol &s) const {
       set_symbol(p.first);
     }
   }
+}
+
+_8PSKModem::_8PSKModem(size_t sample_size, double fc, double bitrate, double A)
+    : QAM(3, sample_size, fc, bitrate, A) {
+  constellation_map = {{0b000, {1., 0.}},  {0b001, {inv_sqrt2, inv_sqrt2}},
+                       {0b101, {0., 1}},   {0b100, {-inv_sqrt2, inv_sqrt2}},
+                       {0b110, {-1., 0.}}, {0b111, {-inv_sqrt2, -inv_sqrt2}},
+                       {0b011, {0., -1}},  {0b010, {inv_sqrt2, -inv_sqrt2}}};
+}
+
+_32QAM::_32QAM(size_t sample_size, double fc, double bitrate, double A)
+    : QAM(5, sample_size, fc, bitrate, A) {
+  constellation_map = {// r = 1
+                       {0b00000, {1., 0.}},
+                       {0b00001, {inv_sqrt2, inv_sqrt2}},
+                       {0b00010, {-inv_sqrt2, inv_sqrt2}},
+                       {0b00011, {0., 1.}},
+                       {0b00100, {inv_sqrt2, -inv_sqrt2}},
+                       {0b00101, {0., -1.}},
+                       {0b00110, {-1., 0.}},
+                       {0b00111, {-inv_sqrt2, -inv_sqrt2}},
+                       // r = 2
+                       {0b01000, {2 * cos22, 2 * sin22}},
+                       {0b01001, {2 * sin22, 2 * cos22}},
+                       {0b01011, {-2 * sin22, 2 * cos22}},
+                       {0b01010, {-2 * cos22, 2 * sin22}},
+                       {0b01110, {-2 * cos22, -2 * sin22}},
+                       {0b01111, {-2 * sin22, -2 * cos22}},
+                       {0b01101, {2 * sin22, -2 * cos22}},
+                       {0b01100, {2 * cos22, -2 * sin22}},
+                       // r = 3
+                       {0b11000, {3., 0.}},
+                       {0b11001, {3 * inv_sqrt2, 3 * inv_sqrt2}},
+                       {0b11011, {0., 3.}},
+                       {0b11010, {-3 * inv_sqrt2, 3 * inv_sqrt2}},
+                       {0b11110, {-3., 0.}},
+                       {0b11111, {-3 * inv_sqrt2, -3 * inv_sqrt2}},
+                       {0b11101, {0., -3.}},
+                       {0b11100, {3 * inv_sqrt2, -3 * inv_sqrt2}},
+                       // r = 4
+                       {0b10000, {4 * cos22, 4 * sin22}},
+                       {0b10001, {4 * sin22, 4 * cos22}},
+                       {0b10011, {-4 * sin22, 4 * cos22}},
+                       {0b10010, {-4 * cos22, 4 * sin22}},
+                       {0b10110, {-4 * cos22, -4 * sin22}},
+                       {0b10111, {-4 * sin22, -4 * cos22}},
+                       {0b10101, {4 * sin22, -4 * cos22}},
+                       {0b10100, {4 * cos22, -4 * sin22}}};
 }

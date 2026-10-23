@@ -75,7 +75,7 @@ TEST_CASE("Fluxo bidirecional e simultâneo de dados (full-duplex)") {
   };
 
   // Instancia os transceptores para este ciclo
-  NRZPolarModem modem(1, 100, 1e3, 2.);
+  NRZPolarModem modem(100, 1e3, 2.);
 
   Transceiver alice(modem.clone());
   Transceiver bob(modem.clone());

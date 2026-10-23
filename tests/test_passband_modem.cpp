@@ -11,7 +11,7 @@ using namespace PhysicalLayer;
 TEST_CASE("PassbandModem::toVolts agrupa bits em símbolos e gera `sample_size` "
           "amostras cada e Passband::fromVolts retorna bytes a partir de "
           "amostras de tamanho `sample_size`") {
-  constexpr size_t sample_size = 500;
+  constexpr size_t sample_size = 1000;
   constexpr size_t fc = 2.4e9;
   constexpr size_t bitrate = 11e6;
   constexpr double A = 2.;
@@ -33,7 +33,7 @@ TEST_CASE("PassbandModem::toVolts agrupa bits em símbolos e gera `sample_size` 
       };
 
       for (auto p : standards) {
-        TestASKModem m(1, sample_size, p.first, p.second, 2.);
+        TestASKModem m(sample_size, p.first, p.second, 2.);
         CHECK(m.get_threshold() == doctest::Approx(1.).epsilon(0.01));
       }
     }
@@ -42,7 +42,7 @@ TEST_CASE("PassbandModem::toVolts agrupa bits em símbolos e gera `sample_size` 
       symbol s{0};
       signal_sample sample;
 
-      TestASKModem m(1, sample_size, fc, bitrate, A);
+      TestASKModem m(sample_size, fc, bitrate, A);
 
       m.modulate(s, sample);
 
@@ -55,7 +55,7 @@ TEST_CASE("PassbandModem::toVolts agrupa bits em símbolos e gera `sample_size` 
       symbol s{1};
       signal_sample sample;
 
-      TestASKModem m(1, sample_size, fc, bitrate, A);
+      TestASKModem m(sample_size, fc, bitrate, A);
       m.modulate(s, sample);
 
       CHECK(sample.size() == sample_size);
@@ -70,7 +70,7 @@ TEST_CASE("PassbandModem::toVolts agrupa bits em símbolos e gera `sample_size` 
 
       sample.insert(sample.end(), sample_size, 0.);
 
-      TestASKModem m(1, sample_size, fc, bitrate, A);
+      TestASKModem m(sample_size, fc, bitrate, A);
       m.demodulate(sample, s);
 
       CHECK(s.size() == 1);
@@ -81,7 +81,7 @@ TEST_CASE("PassbandModem::toVolts agrupa bits em símbolos e gera `sample_size` 
       symbol s;
       signal_sample sample;
 
-      TestASKModem m(1, sample_size, fc, bitrate, A);
+      TestASKModem m(sample_size, fc, bitrate, A);
 
       for (size_t n = 0; n < sample_size; n++)
         sample.push_back((*m.get_carrier())[n]);
@@ -102,7 +102,7 @@ TEST_CASE("PassbandModem::toVolts agrupa bits em símbolos e gera `sample_size` 
       signal_sample *get_f2_carrier() { return &f2_carrier; };
     };
 
-    TestFSKModem m(1, sample_size, fc, bitrate, A, 1e3);
+    TestFSKModem m(sample_size, fc, bitrate, A, 1e3);
 
     SUBCASE("modulate(0) gera a frequência f0 = fc - fd") {
       symbol s{0};
@@ -154,15 +154,15 @@ TEST_CASE("PassbandModem::toVolts agrupa bits em símbolos e gera `sample_size` 
 
       auto get_constellation() { return constellation_map; }
       double correlate(signal_sample g, signal_sample x) {
-        return cross_correlation(g, x);
+        return projection_coefficient(g, x);
       }
     };
 
-    Test8PSKModem m(3, sample_size, fc, bitrate * 3, A);
+    Test8PSKModem m(sample_size, fc, bitrate * 3, A);
 
     SUBCASE("Constelação tem 8 pontos distintos, todos com mesma amplitude") {
       auto c = m.get_constellation();
-      auto amp = [](std::pair<double, double> c) {
+      auto amp = [](IQ_coord c) {
         return sqrt(c.first * c.first + c.second * c.second);
       };
 
@@ -176,9 +176,8 @@ TEST_CASE("PassbandModem::toVolts agrupa bits em símbolos e gera `sample_size` 
 
     SUBCASE(
         "Símbolos adjacentes na constelação são distinguíveis por correlação") {
-      // Verifica se a correlação cruzada entre símbolos distintos é sempre
-      // menor que a autocorrelação, necessário para que a demodulação
-      // consiga discriminar entre eles.
+      // Verifica se a correlação entre sinais de símbolos distintos é sempre
+      // menor que a autocorrelação, necessário para discriminar entre eles.
 
       for (int i = 0; i < 8; i++) {
         symbol si;
@@ -224,6 +223,92 @@ TEST_CASE("PassbandModem::toVolts agrupa bits em símbolos e gera `sample_size` 
     }
   }
 
+  SUBCASE("Modem 32-QAM") {
+    class Test32QAMModem : public _32QAM {
+    public:
+      using _32QAM::_32QAM;
+
+      auto get_constellation() { return constellation_map; }
+      IQ_coord project(signal_sample &g) {
+        return {projection_coefficient(g, I), projection_coefficient(g, Q)};
+      }
+    };
+
+    Test32QAMModem m(sample_size, fc, bitrate * 5, A);
+
+    SUBCASE("Constelação tem 32 pontos distintos, 8 em cada anel,"
+            "com amplitudes em 1, 2, 3 e 4") {
+      auto c = m.get_constellation();
+      auto amp = [](IQ_coord c) {
+        return sqrt(c.first * c.first + c.second * c.second);
+      };
+
+      int counts[4] = {0, 0, 0, 0};
+      for (int i = 0; i < 32; i++) {
+        bool ok = false;
+        double a = amp(c[i].second);
+        for (int r = 1; r <= 4; r++)
+          // Verifica se a amplitude equivale a um dos raios da constelação
+          if (a == doctest::Approx(r).epsilon(1e-6)) {
+            counts[r - 1]++;
+            ok = true;
+            break;
+          }
+        CHECK(ok);
+      }
+
+      // Verifica se há 8 pontos em cada anel
+      for (int r = 0; r < 4; r++)
+        CHECK(counts[r] == 8);
+
+      // Verifica se todos os pontos são distintos
+      for (int i = 0; i < 32; i++)
+        for (int j = 0; j < 32; j++)
+          if (i != j)
+            CHECK((amp({c[i].second.first - c[j].second.first,
+                        c[i].second.second - c[j].second.second})) >
+                  0.76); // Menor distância entre pontos é ≈ 0,765
+    }
+
+    SUBCASE("Projeção em I e Q retorna a coordenada correspondente") {
+      auto c = m.get_constellation();
+
+      for (auto &p : c) {
+        symbol s;
+        for (int b = 0; b < 5; b++)
+          s.push_back((p.first >> b) & 1);
+
+        signal_sample sample;
+        m.modulate(s, sample);
+        CHECK(sample.size() == sample_size);
+
+        IQ_coord coord = m.project(sample);
+        CHECK(coord.first ==
+              doctest::Approx(p.second.first).epsilon(1e-3).scale(4));
+        CHECK(coord.second ==
+              doctest::Approx(p.second.second).epsilon(1e-3).scale(4));
+      }
+    }
+
+    SUBCASE("Roundtrip: cada um dos 32 símbolos é recuperado corretamente") {
+      for (int val = 0; val < 32; val++) {
+        symbol s, recovered;
+        for (int b = 0; b < 5; b++)
+          s.push_back((val >> b) & 1);
+
+        signal_sample sample;
+        m.modulate(s, sample);
+
+        CHECK(sample.size() == sample_size);
+
+        m.demodulate(sample, recovered);
+
+        CHECK(recovered.size() == 5);
+        CHECK(recovered == s);
+      }
+    }
+  }
+
   SUBCASE("Roundtrip: toVolts seguido de fromVolts recupera os dados originais "
           "para diversos tamanhos e padrões de mensagem") {
     const char *signal_debug_path = "/tmp/signal_debug";
@@ -232,13 +317,14 @@ TEST_CASE("PassbandModem::toVolts agrupa bits em símbolos e gera `sample_size` 
     constexpr double bitrate = 11e6;
     constexpr double A = 2.;
 
-    ASKModem ask(1, sample_size, fc, bitrate, A);
-    FSKModem fsk(1, sample_size, fc, bitrate, A, 1e3);
-    _8PSKModem _8psk(3, sample_size, fc, bitrate * 3, A);
+    ASKModem ask(sample_size, fc, bitrate, A);
+    FSKModem fsk(sample_size, fc, bitrate, A, 1e3);
+    _8PSKModem _8psk(sample_size, fc, bitrate * 3, A);
+    _32QAM _32qam(sample_size, fc, bitrate * 5, A);
 
     std::filesystem::create_directory(signal_debug_path);
 
-    PassbandModem *modems[3]{&ask, &fsk, &_8psk};
+    PassbandModem *modems[4]{&ask, &fsk, &_8psk, &_32qam};
 
     for (PassbandModem *modem : modems) {
       auto roundtrip = [&modem](const bytes &original) {

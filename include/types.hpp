@@ -18,7 +18,7 @@ typedef std::vector<bit> symbol;
 typedef std::vector<double> signal_sample;
 
 typedef std::pair<double, double> IQ_coord;
-template <size_t n> using IQ_map = std::pair<char, IQ_coord>[n];
+typedef std::vector<std::pair<char, IQ_coord>> IQ_map;
 
 constexpr struct sockaddr_un channel = {AF_UNIX, "/tmp/channel.sock"};
 
