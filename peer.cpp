@@ -1,5 +1,6 @@
 #include "modem.hpp"
 #include "transceiver.hpp"
+#include "include/link.hpp"
 #include <cstddef>
 #include <iostream>
 #include <memory>
@@ -7,18 +8,25 @@
 #include <thread>
 
 using namespace PhysicalLayer;
+using namespace DataLinkLayer;
 
-void tx(Transceiver *trx, const char *name) {
+void tx(Transceiver *trx, LinkLayer *link, const char *name) {
   std::string message;
   bytes message_bytes;
 
-  auto send_message = [&message_bytes, &trx](std::string m) {
+  auto send_message = [&message_bytes, &trx, &link](std::string m) {
     const std::byte *buf = reinterpret_cast<const std::byte *>(m.data());
     message_bytes.insert(message_bytes.end(), buf, buf + m.size());
     message_bytes.push_back(std::byte{0});
 
     try {
-      trx->transmit(message_bytes);
+      bytes framed_message = link->apply_framing(message_bytes);
+      std::cout << "Quadro HEX (TX): "; //teste
+      for (auto b : framed_message) {
+        printf("%02X ", std::to_integer<int>(b));
+      }
+      std::cout << "\nTX >> " << std::flush; //teste
+      trx->transmit(framed_message);
     } catch (std::runtime_error &e) {
       std::cerr << e.what() << std::endl;
     }
@@ -29,7 +37,7 @@ void tx(Transceiver *trx, const char *name) {
   send_message(salute);
 
   while (true) {
-    std::cout << "TX >> ";
+    std::cout << "TX >> " << std::flush;
     getline(std::cin, message);
 
     if (message == ":q") {
@@ -44,7 +52,7 @@ void tx(Transceiver *trx, const char *name) {
   trx->shutdown();
 }
 
-void rx(Transceiver *trx) {
+void rx(Transceiver *trx, LinkLayer *link) {
   // Loop de camadas de rede (física -> enlace -> aplicação)
   bytes received, chunk;
   std::string message;
@@ -60,12 +68,16 @@ void rx(Transceiver *trx) {
 
       received.insert(received.end(), chunk.begin(), chunk.end());
 
-      if (received.size() > 255)
+      if (received.size() > 512)
         received.clear();
+      
+      // 1. CAMADA DE ENLACE: Tenta extrair o payload do quadro recebido
+      bool ok = false;
+      bytes payload = link->remove_framing(received, ok);
 
-      // Verificação de delimitador
-      if (!received.empty() && received.back() == std::byte{0}) {
-        message = reinterpret_cast<char *>(received.data());
+      // 2. APLICAÇÃO: Se 'ok' for true, o quadro está completo e processado
+      if (ok && !payload.empty() && payload.back() == std::byte{0}) {
+        message = reinterpret_cast<char *>(payload.data());
 
         std::cout << "\033[2K\r" << message << " << RX\nTX >> " << std::flush;
         received.clear();
@@ -87,10 +99,12 @@ int main(int argc, char **argv) {
 
   Transceiver trx(modem);
 
+  LinkLayer link(BYTE_STUFFING);
+
   trx.connect();
 
-  std::thread tx_t(tx, &trx, name);
-  std::thread rx_t(rx, &trx);
+  std::thread tx_t(tx, &trx, &link, name);
+  std::thread rx_t(rx, &trx, &link);
 
   tx_t.join();
   rx_t.join();
