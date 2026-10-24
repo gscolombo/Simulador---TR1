@@ -60,6 +60,9 @@ void rx(Transceiver *trx) {
 
       received.insert(received.end(), chunk.begin(), chunk.end());
 
+      if (received.size() > 255)
+        received.clear();
+
       // Verificação de delimitador
       if (!received.empty() && received.back() == std::byte{0}) {
         message = reinterpret_cast<char *>(received.data());
@@ -80,8 +83,7 @@ int main(int argc, char **argv) {
 
   const char *name = argv[1];
 
-  std::shared_ptr<NRZPolarModem> modem =
-      std::make_shared<NRZPolarModem>(1, 100, 1e3, 2.);
+  std::shared_ptr<_32QAM> modem = std::make_shared<_32QAM>(2e3, 10e3, 1e3, 2.);
 
   Transceiver trx(modem);
 
