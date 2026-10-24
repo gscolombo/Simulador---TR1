@@ -24,6 +24,11 @@ void tx(Transceiver *trx, LinkLayer *link, const char *name) {
       //if (framed_message.size() > 3) { INJEÇÃO DE ERRO PROPOSITAL (Para Teste)
       //    framed_message[2] = framed_message[2] ^ std::byte{0xFF}; // INJEÇÃO DE ERRO PROPOSITAL (Para Teste)
       //} // INJEÇÃO DE ERRO PROPOSITAL (Para Teste)
+
+      // INJEÇÃO DE ERRO PARA TESTAR HAMMING:
+      //if (framed_message.size() > 5) { 
+      //    framed_message[3] = framed_message[3] ^ std::byte{0x04}; // Altera o bit da posição 2
+      //}
       
       std::cout << "Quadro HEX (TX): ";
       for (auto b : framed_message) {
@@ -103,7 +108,7 @@ int main(int argc, char **argv) {
 
   Transceiver trx(modem);
 
-  LinkLayer link(BYTE_STUFFING, CRC32);
+  LinkLayer link(BYTE_STUFFING, CRC32, HAMMING);
 
   trx.connect();
 

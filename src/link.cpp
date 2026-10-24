@@ -5,8 +5,8 @@
 using namespace DataLinkLayer;
 using namespace PhysicalLayer;
 
-LinkLayer::LinkLayer(FramingType framing, ErrorDetectionType detection) 
-    : framing_type(framing), detection_type(detection) {}
+LinkLayer::LinkLayer(FramingType framing, ErrorDetectionType detection, ErrorCorrectionType correction) 
+    : framing_type(framing), detection_type(detection), correction_type(correction) {}
 
 // ==========================================
 // MÉTODOS AUXILIARES DE CONVERSÃO BIT/BYTE
@@ -230,18 +230,21 @@ bytes LinkLayer::remove_framing(const bytes &frame, bool &ok) {
 }
 
 bytes LinkLayer::pack(const bytes &payload) {
-    bytes protected_data = apply_error_detection(payload);
-    return apply_framing(protected_data);
+    bytes detected_data = apply_error_detection(payload);
+    bytes corrected_data = apply_error_correction(detected_data);
+    return apply_framing(corrected_data);
 }
 
 bool LinkLayer::unpack(const bytes &frame, bytes &payload) {
     bool ok = false;
-    payload = remove_framing(frame, ok);
-    
-    if (!ok) return false; // Falhou no enquadramento
-    
-    // Verifica a integridade e já remove os bytes de redundância do payload
-    return verify_error_detection(payload);
+    bytes unframed_data = remove_framing(frame, ok);
+    if (!ok) return false;
+
+    bytes uncorrected_data = verify_and_correct_error(unframed_data, ok);
+    if (!ok) return false;
+
+    payload = uncorrected_data;
+    return verify_error_detection(payload); // CRC decide a palavra final
 }
 
 // ==========================================
@@ -361,4 +364,96 @@ bool LinkLayer::verify_error_detection(bytes &data) {
         return received_crc == crc;
     }
     return true;
+}
+
+uint8_t LinkLayer::encode_hamming74(uint8_t data) {
+    // Isola os 4 bits de dados (d1, d2, d3, d4)
+    uint8_t d1 = (data >> 3) & 1;
+    uint8_t d2 = (data >> 2) & 1;
+    uint8_t d3 = (data >> 1) & 1;
+    uint8_t d4 = data & 1;
+
+    // Calcula os 3 bits de paridade par
+    uint8_t p1 = d1 ^ d2 ^ d4;
+    uint8_t p2 = d1 ^ d3 ^ d4;
+    uint8_t p4 = d2 ^ d3 ^ d4;
+
+    // Posiciona os bits nas casas corretas (de 1 a 7) para o cálculo da síndrome funcionar perfeitamente depois. O bit 0 fica livre.
+    return (p1 << 1) | (p2 << 2) | (d1 << 3) | (p4 << 4) | (d2 << 5) | (d3 << 6) | (d4 << 7);
+}
+
+uint8_t LinkLayer::decode_hamming74(uint8_t encoded) {
+    uint8_t p1 = (encoded >> 1) & 1;
+    uint8_t p2 = (encoded >> 2) & 1;
+    uint8_t d1 = (encoded >> 3) & 1;
+    uint8_t p4 = (encoded >> 4) & 1;
+    uint8_t d2 = (encoded >> 5) & 1;
+    uint8_t d3 = (encoded >> 6) & 1;
+    uint8_t d4 = (encoded >> 7) & 1;
+
+    // Calcula a Síndrome de erro
+    uint8_t s1 = p1 ^ d1 ^ d2 ^ d4;
+    uint8_t s2 = p2 ^ d1 ^ d3 ^ d4;
+    uint8_t s4 = p4 ^ d2 ^ d3 ^ d4;
+
+    uint8_t syndrome = (s4 << 2) | (s2 << 1) | s1;
+
+    if (syndrome != 0) {
+        // Se síndrome > 0, ocorreu um erro na posição correspondente. 
+        // Inverte o bit exato para corrigi-lo.
+        encoded ^= (1 << syndrome); 
+        
+        // Re-extrai os dados agora que o bit foi corrigido
+        d1 = (encoded >> 3) & 1;
+        d2 = (encoded >> 5) & 1;
+        d3 = (encoded >> 6) & 1;
+        d4 = (encoded >> 7) & 1;
+    }
+
+    return (d1 << 3) | (d2 << 2) | (d3 << 1) | d4;
+}
+
+bytes LinkLayer::apply_error_correction(const bytes &data) {
+    if (correction_type == NONE_CORRECTION) return data;
+
+    bytes result;
+    if (correction_type == HAMMING) {
+        for (auto b : data) {
+            uint8_t val = static_cast<uint8_t>(b);
+            // Quebra 1 byte em dois pedaços de 4 bits
+            uint8_t high_nibble = (val >> 4) & 0x0F;
+            uint8_t low_nibble = val & 0x0F;
+
+            // Insere os dois bytes codificados com Hamming(7,4)
+            result.push_back(static_cast<std::byte>(encode_hamming74(high_nibble)));
+            result.push_back(static_cast<std::byte>(encode_hamming74(low_nibble)));
+        }
+    }
+    return result;
+}
+
+bytes LinkLayer::verify_and_correct_error(const bytes &data, bool &ok) {
+    ok = true;
+    if (correction_type == NONE_CORRECTION) return data;
+
+    bytes result;
+    if (correction_type == HAMMING) {
+        if (data.size() % 2 != 0) {
+            ok = false; // Quadro quebrado
+            return result;
+        }
+        for (size_t i = 0; i < data.size(); i += 2) {
+            uint8_t high_encoded = static_cast<uint8_t>(data[i]);
+            uint8_t low_encoded = static_cast<uint8_t>(data[i+1]);
+
+            // Decodifica e corrige eventuais falhas (flip de 1 bit)
+            uint8_t high_nibble = decode_hamming74(high_encoded);
+            uint8_t low_nibble = decode_hamming74(low_encoded);
+
+            // Remonta o byte original
+            uint8_t val = (high_nibble << 4) | low_nibble;
+            result.push_back(static_cast<std::byte>(val));
+        }
+    }
+    return result;
 }
