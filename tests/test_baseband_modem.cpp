@@ -7,7 +7,7 @@ using namespace PhysicalLayer;
 TEST_CASE(
     "Conversão dados ↔ volts em modem banda-base com codificação NRZ polar") {
   const size_t sample_size = 100;
-  NRZPolarModem modem(1, sample_size, 1e3, 1.);
+  NRZPolarModem modem(sample_size, 1e3, 1.);
   bytes data{std::byte{0b10011110}};
   bytes volts;
   std::vector<double> expected_level{-1., 1., 1., 1., 1., -1., -1., 1.};
@@ -28,7 +28,7 @@ TEST_CASE(
 TEST_CASE(
     "Conversão dados ↔ volts em modem banda-base com codificação Manchester") {
   const size_t sample_size = 100;
-  ManchesterModem modem(1, sample_size, 1e3, 1.);
+  ManchesterModem modem(sample_size, 1e3, 1.);
   bytes data{std::byte{0b10011110}};
   bytes volts;
   std::vector<std::pair<double, double>> expected_halves{
@@ -56,7 +56,7 @@ TEST_CASE(
 TEST_CASE(
     "Conversão dados ↔ volts em modem banda-base com codificação Bipolar") {
   const size_t sample_size = 100;
-  BipolarModem modem(1, sample_size, 1e3, 1.);
+  BipolarModem modem(sample_size, 1e3, 1.);
   bytes data{std::byte{0b10011110}};
   bytes volts;
   std::vector<double> expected_level{0., 1., -1., 1., -1., 0., 0., 1.};

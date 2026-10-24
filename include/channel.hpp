@@ -2,6 +2,7 @@
 #define CHANNEL_H
 
 #include "types.hpp"
+#include <random>
 #include <sys/poll.h>
 #include <sys/socket.h>
 
@@ -24,6 +25,8 @@ private:
   struct pollfd fds[3];
   double noise_mu;
   double noise_sigma;
+  std::mt19937 gn;
+  std::normal_distribution<double> dist;
 
   void add_noise(bytes &signal);
 };

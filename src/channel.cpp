@@ -18,7 +18,16 @@
 using namespace PhysicalLayer;
 
 Channel::Channel(double noise_mu, double noise_sigma)
-    : noise_mu(noise_mu), noise_sigma(noise_sigma) {}
+    : noise_mu(noise_mu), noise_sigma(noise_sigma) {
+  if (noise_sigma == 0.)
+    return;
+
+  // Configura gerador gaussiano de números pseudo-aleatórios
+  std::random_device seed;
+
+  gn = std::mt19937(seed());
+  dist = std::normal_distribution<double>(noise_mu, noise_sigma);
+}
 
 void Channel::open() {
   if (CHANNEL_DEBUG)
@@ -57,11 +66,10 @@ void Channel::open() {
 }
 
 void Channel::stream() {
-  bool run = true;
   bytes signal(BUF_SIZE);
 
   try {
-    while (run) {
+    while (true) {
       // Aguarda por algum transceptor estar pronto para enviar dados
       int ev = poll(fds, 3, 100);
       check_err(ev, "Erro durante polling no canal.");
@@ -140,17 +148,12 @@ void Channel::add_noise(bytes &signal) {
   const size_t bufsize = signal.size();
   assert(bufsize % sizeof(double) == 0);
 
-  // Configura gerador gaussiano de números pseudo-aleatórios
-  std::random_device rd;
-  std::mt19937 seed;
-  std::normal_distribution<double> gn(noise_mu, noise_sigma);
-
   // Interpreta buffer de bytes como ponto-flutuante (8 bytes)
   double *data = reinterpret_cast<double *>(signal.data());
 
   // Adiciona ruído gaussiano ao sinal
   for (double *D = data; D < data + bufsize / sizeof(double); D++)
-    *D += gn(seed);
+    *D += dist(gn);
 }
 
 Channel::~Channel() { close(); }

@@ -2,6 +2,7 @@
 #define MODEM_H
 
 #include "types.hpp"
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -31,22 +32,36 @@ protected:
   double baud;
   double A;
 
-  double cross_correlation(const signal_sample &g,
-                           const signal_sample &x) const;
+  double projection_coefficient(const signal_sample &g,
+                                const signal_sample &x) const;
   double signal_energy(const signal_sample &y) const;
+  double signal_correlation(const signal_sample &g,
+                            const signal_sample &x) const;
+  void estimate_df_offset(const signal_sample &sample);
 
   virtual void modulate(symbol &s, signal_sample &sample) const = 0;
   virtual void demodulate(signal_sample &sample, symbol &s) const = 0;
+
+  double dc_offset = 0;
 
 private:
   uint8_t rx_bits;
   uint64_t rx_acc;
   bytes sig_buf;
+
+  int k;
+  double *means, running_sum = 0;
+  int means_counter = 0, m0 = 0;
 };
 
-class NRZPolarModem : public Modem {
+class BasebandModem : public Modem {
 public:
-  using Modem::Modem;
+  BasebandModem(size_t sample_size, double bitrate, double A);
+};
+
+class NRZPolarModem : public BasebandModem {
+public:
+  using BasebandModem::BasebandModem;
 
   std::shared_ptr<Modem> clone() const override {
     return std::make_shared<NRZPolarModem>(*this);
@@ -57,10 +72,9 @@ private:
   void demodulate(signal_sample &sample, symbol &s) const override;
 };
 
-class ManchesterModem : public Modem {
+class ManchesterModem : public BasebandModem {
 public:
-  ManchesterModem(size_t symbol_size, size_t sample_size, double bitrate,
-                  double A);
+  ManchesterModem(size_t sample_size, double bitrate, double A);
 
   std::shared_ptr<Modem> clone() const override {
     return std::make_shared<ManchesterModem>(*this);
@@ -73,9 +87,9 @@ private:
   void demodulate(signal_sample &sample, symbol &s) const override;
 };
 
-class BipolarModem : public Modem {
+class BipolarModem : public BasebandModem {
 public:
-  using Modem::Modem;
+  using BasebandModem::BasebandModem;
 
   std::shared_ptr<Modem> clone() const override {
     return std::make_shared<BipolarModem>(*this);
@@ -83,6 +97,7 @@ public:
 
 private:
   mutable bool positive = false;
+
   void modulate(symbol &s, signal_sample &sample) const override;
   void demodulate(signal_sample &sample, symbol &s) const override;
 };
@@ -100,8 +115,7 @@ protected:
 
 class ASKModem : public PassbandModem {
 public:
-  ASKModem(size_t symbol_size, size_t sample_size, double fc, double bitrate,
-           double A);
+  ASKModem(size_t sample_size, double fc, double bitrate, double A);
 
   std::shared_ptr<Modem> clone() const override {
     return std::make_shared<ASKModem>(*this);
@@ -117,8 +131,7 @@ protected:
 
 class FSKModem : public PassbandModem {
 public:
-  FSKModem(size_t symbol_size, size_t sample_size, double fc, double bitrate,
-           double A, double fd);
+  FSKModem(size_t sample_size, double fc, double bitrate, double A, double fd);
 
   std::shared_ptr<Modem> clone() const override {
     return std::make_shared<FSKModem>(*this);
@@ -133,24 +146,42 @@ protected:
   signal_sample f2_carrier; // fc + fd
 };
 
-class _8PSKModem : public PassbandModem {
+class QAM : public PassbandModem {
 public:
-  _8PSKModem(size_t symbol_size, size_t sample_size, double fc, double bitrate,
-             double A);
-
-  std::shared_ptr<Modem> clone() const override {
-    return std::make_shared<_8PSKModem>(*this);
-  }
+  QAM(size_t symbol_size, size_t sample_size, double fc, double bitrate,
+      double A);
 
   void modulate(symbol &s, signal_sample &sample) const override;
   void demodulate(signal_sample &sample, symbol &s) const override;
 
 protected:
-  IQ_map<8> constellation_map;
   signal_sample I, Q;
-
-private:
+  IQ_map constellation_map;
   static constexpr double inv_sqrt2 = 1 / std::numbers::sqrt2_v<double>;
+
+  void set_IQ_signals();
+};
+
+class _8PSKModem : public QAM {
+public:
+  _8PSKModem(size_t sample_size, double fc, double bitrate, double A);
+
+  std::shared_ptr<Modem> clone() const override {
+    return std::make_shared<_8PSKModem>(*this);
+  }
+};
+
+class _32QAM : public QAM {
+public:
+  _32QAM(size_t sample_size, double fc, double bitrate, double A);
+
+  std::shared_ptr<Modem> clone() const override {
+    return std::make_shared<_32QAM>(*this);
+  }
+
+protected:
+  const double cos22 = cos(22.5 * (PI / 180));
+  const double sin22 = sin(22.5 * (PI / 180));
 };
 
 } // namespace PhysicalLayer
