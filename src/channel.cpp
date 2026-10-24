@@ -80,7 +80,7 @@ void Channel::stream() {
             // Transmissor fechou a conexão
             if (!n) {
               fds[i].fd = -1;
-              break;
+              continue;
             }
 
             signal.resize(n);
@@ -97,6 +97,10 @@ void Channel::stream() {
 
             // Determina qual o destinatário dos dados
             int recipient = i == 1 ? fds[2].fd : fds[1].fd;
+            if (recipient < 0) {
+              std::cout << "Dados perdidos." << std::endl;
+              break;
+            }
 
             add_noise(signal);
 
@@ -119,7 +123,6 @@ void Channel::stream() {
     }
   } catch (const std::runtime_error &e) {
     std::cout << e.what() << std::endl;
-    exit(1);
   }
 }
 
