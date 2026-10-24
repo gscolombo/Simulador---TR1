@@ -15,20 +15,35 @@ enum FramingType {
     BIT_STUFFING
 };
 
+enum ErrorDetectionType {
+    NONE_DETECTION,
+    PARITY_EVEN,
+    CHECKSUM,
+    CRC32
+};
+
 class LinkLayer {
 public:
-    LinkLayer(FramingType framing);
+    // Agora o construtor recebe também o tipo de detecção (default: sem detecção)
+    LinkLayer(FramingType framing, ErrorDetectionType detection = NONE_DETECTION);
 
-    // Empacota os dados da aplicação em um quadro (Transmissor)
-    PhysicalLayer::bytes apply_framing(const PhysicalLayer::bytes &payload);
-
-    // Desempacota o quadro recebido, recuperando o payload original (Receptor)
-    PhysicalLayer::bytes remove_framing(const PhysicalLayer::bytes &frame, bool &ok);
+    // Métodos principais que integram Erro + Enquadramento
+    PhysicalLayer::bytes pack(const PhysicalLayer::bytes &payload);
+    bool unpack(const PhysicalLayer::bytes &frame, PhysicalLayer::bytes &payload);
 
 private:
     FramingType framing_type;
+    ErrorDetectionType detection_type;
 
-    // Métodos auxiliares para bits (úteis para Bit Stuffing e Interleaving)
+    // Enquadramento
+    PhysicalLayer::bytes apply_framing(const PhysicalLayer::bytes &payload);
+    PhysicalLayer::bytes remove_framing(const PhysicalLayer::bytes &frame, bool &ok);
+
+    // Controle de Erro (Novas funções)
+    PhysicalLayer::bytes apply_error_detection(const PhysicalLayer::bytes &data);
+    bool verify_error_detection(PhysicalLayer::bytes &data);
+
+    // Auxiliares
     std::vector<uint8_t> bytes_to_bits(const PhysicalLayer::bytes &data);
     PhysicalLayer::bytes bits_to_bytes(const std::vector<uint8_t> &bits);
 };

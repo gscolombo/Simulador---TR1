@@ -8,6 +8,7 @@ using namespace PhysicalLayer;
 int main() {
   try {
     Channel channel(100., 2.);
+    //Channel channel(0., 50.); teste
     std::cout << "Canal iniciado" << std::endl;
 
     channel.open();

@@ -20,12 +20,16 @@ void tx(Transceiver *trx, LinkLayer *link, const char *name) {
     message_bytes.push_back(std::byte{0});
 
     try {
-      bytes framed_message = link->apply_framing(message_bytes);
-      std::cout << "Quadro HEX (TX): "; //teste
+      bytes framed_message = link->pack(message_bytes);
+      //if (framed_message.size() > 3) { INJEÇÃO DE ERRO PROPOSITAL (Para Teste)
+      //    framed_message[2] = framed_message[2] ^ std::byte{0xFF}; // INJEÇÃO DE ERRO PROPOSITAL (Para Teste)
+      //} // INJEÇÃO DE ERRO PROPOSITAL (Para Teste)
+      
+      std::cout << "Quadro HEX (TX): ";
       for (auto b : framed_message) {
         printf("%02X ", std::to_integer<int>(b));
       }
-      std::cout << "\nTX >> " << std::flush; //teste
+      std::cout << "\nTX >> " << std::flush;
       trx->transmit(framed_message);
     } catch (std::runtime_error &e) {
       std::cerr << e.what() << std::endl;
@@ -72,8 +76,8 @@ void rx(Transceiver *trx, LinkLayer *link) {
         received.clear();
       
       // 1. CAMADA DE ENLACE: Tenta extrair o payload do quadro recebido
-      bool ok = false;
-      bytes payload = link->remove_framing(received, ok);
+      bytes payload;
+      bool ok = link->unpack(received, payload);
 
       // 2. APLICAÇÃO: Se 'ok' for true, o quadro está completo e processado
       if (ok && !payload.empty() && payload.back() == std::byte{0}) {
@@ -99,7 +103,7 @@ int main(int argc, char **argv) {
 
   Transceiver trx(modem);
 
-  LinkLayer link(BYTE_STUFFING);
+  LinkLayer link(BYTE_STUFFING, CRC32);
 
   trx.connect();
 
