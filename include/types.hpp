@@ -21,7 +21,6 @@ typedef std::pair<double, double> IQ_coord;
 typedef std::vector<std::pair<char, IQ_coord>> IQ_map;
 
 constexpr struct sockaddr_un channel = {AF_UNIX, "/tmp/channel.sock"};
-
 } // namespace PhysicalLayer
 
 #endif
