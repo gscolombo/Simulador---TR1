@@ -1,10 +1,14 @@
+#include "config/modem.hpp"
 #include "modem.hpp"
 #include "transceiver.hpp"
+#include <algorithm>
 #include <cstddef>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <thread>
+#include <vector>
 
 using namespace PhysicalLayer;
 
@@ -29,8 +33,9 @@ void tx(Transceiver *trx, const char *name) {
   send_message(salute);
 
   while (true) {
-    std::cout << "TX >> ";
-    getline(std::cin, message);
+    // Fim da entrada (EOF) equivale a sair do chat
+    if (!getline(std::cin, message))
+      message = ":q";
 
     if (message == ":q") {
       std::string farewell = std::string(name) + " saiu";
@@ -67,7 +72,10 @@ void rx(Transceiver *trx) {
       if (!received.empty() && received.back() == std::byte{0}) {
         message = reinterpret_cast<char *>(received.data());
 
-        std::cout << "\033[2K\r" << message << " << RX\nTX >> " << std::flush;
+        // Remove quebra de linha ao final da mensagem
+        std::replace(message.begin(), message.end(), '\n', ' ');
+        std::cout << message << std::endl;
+
         received.clear();
         trx->reset_modem();
       }
@@ -77,23 +85,33 @@ void rx(Transceiver *trx) {
 
 int main(int argc, char **argv) {
   if (argc < 2) {
-    std::cout << "Passe o nome do usuário" << std::endl;
+    std::cerr << "Passe o nome do usuário" << std::endl;
     return -1;
   }
 
   const char *name = argv[1];
+  std::vector<std::string> modem_args;
 
-  std::shared_ptr<_32QAM> modem = std::make_shared<_32QAM>(2e3, 10e3, 1e3, 2.);
+  for (int i = 2; i < argc; i++)
+    modem_args.push_back(argv[i]);
 
-  Transceiver trx(modem);
+  try {
+    std::shared_ptr<PhysicalLayer::Modem> modem =
+        Config::Modem::make_modem(Config::Modem::parse_args(modem_args));
 
-  trx.connect();
+    Transceiver trx(modem);
 
-  std::thread tx_t(tx, &trx, name);
-  std::thread rx_t(rx, &trx);
+    trx.connect();
 
-  tx_t.join();
-  rx_t.join();
+    std::thread tx_t(tx, &trx, name);
+    std::thread rx_t(rx, &trx);
+
+    tx_t.join();
+    rx_t.join();
+  } catch (const std::exception &e) {
+    std::cerr << e.what() << std::endl;
+    return 1;
+  }
 
   return 0;
 }
