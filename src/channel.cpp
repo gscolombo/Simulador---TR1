@@ -1,3 +1,19 @@
+/**
+ * @file channel.cpp
+ * @brief Implementação do canal físico com ruído AWGN.
+ * @details
+ * O canal recebe do modem blocos binários que contêm amostras `double` de
+ * tensão. O socket Unix é somente o suporte de transporte entre os
+ * transceptores: antes do encaminhamento, cada amostra é convertida
+ * conceitualmente para `double`, recebe ruído gaussiano aditivo e volta a ser
+ * enviada como bytes.
+ *
+ * Para uma amostra de tensão `v`, a degradação simulada é:
+ * `v' = v + n`, com `n ~ N(noise_mu, noise_sigma^2)`. Logo, os parâmetros do
+ * construtor permitem variar a interferência média e sua dispersão, enquanto
+ * `noise_sigma == 0` mantém o canal ideal.
+ */
+
 #include "channel.hpp"
 #include "types.hpp"
 
