@@ -1,3 +1,13 @@
+/**
+ * @file modem.cpp
+ * @brief Implementação dos modems de banda-base e banda passante.
+ * @details
+ * A implementação converte grupos de bits em amostras de tensão e aplica a
+ * demodulação correspondente no receptor. As classes de banda-base usam
+ * pulsos diretamente, enquanto as classes de banda passante usam portadoras
+ * e, quando aplicável, constelações em coordenadas I/Q.
+ */
+
 #include "modem.hpp"
 #include "types.hpp"
 #include <cassert>

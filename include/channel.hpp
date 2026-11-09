@@ -70,6 +70,7 @@ public:
 
 protected:
 private:
+  /** Descritor do socket de escuta do canal. */
   int channel_sock;
   /**
    * @brief Estrutura de socket do canal.
@@ -91,7 +92,9 @@ private:
    * @details Esta variável armazena o desvio padrão do ruído gaussiano a ser adicionado ao sinal.
    */
   double noise_sigma;
+  /** Gerador pseudoaleatório usado para produzir o ruído. */
   std::mt19937 gn;
+  /** Distribuição normal configurada com a média e o desvio do ruído. */
   std::normal_distribution<double> dist;
 
   /**
