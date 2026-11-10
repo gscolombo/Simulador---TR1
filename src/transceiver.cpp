@@ -1,3 +1,12 @@
+/**
+ * @file transceiver.cpp
+ * @brief Implementação da interface entre modem e canal físico.
+ * @details
+ * O transceptor mantém a conexão Unix com o canal, serializa mensagens por
+ * meio do modem para transmissão e acumula os bytes demodulados na fila de
+ * recepção.
+ */
+
 #include "transceiver.hpp"
 #include "channel.hpp"
 #include "types.hpp"
