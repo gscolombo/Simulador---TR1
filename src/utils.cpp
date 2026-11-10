@@ -1,3 +1,8 @@
+/**
+ * @file utils.cpp
+ * @brief Implementação das funções auxiliares da simulação.
+ */
+
 #include "utils.hpp"
 #include <charconv>
 #include <stdexcept>

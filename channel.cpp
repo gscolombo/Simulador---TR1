@@ -1,5 +1,7 @@
 #include "channel.hpp"
 #include "utils.hpp"
+#include <cstring>
+#include <errno.h>
 #include <iostream>
 #include <unistd.h>
 
@@ -32,7 +34,7 @@ int main(int argc, char **argv) {
     std::cout << "Canal fechado" << std::endl;
 
   } catch (const std::exception &e) {
-    std::cerr << e.what() << std::endl;
+    std::cerr << e.what() << " (" << strerror(errno) << ")" << std::endl;
     return 1;
   }
 

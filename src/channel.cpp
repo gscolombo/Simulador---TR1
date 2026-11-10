@@ -1,3 +1,19 @@
+/**
+ * @file channel.cpp
+ * @brief Implementação do canal físico com ruído AWGN.
+ * @details
+ * O canal recebe do modem blocos binários que contêm amostras `double` de
+ * tensão. O socket Unix é somente o suporte de transporte entre os
+ * transceptores: antes do encaminhamento, cada amostra é convertida
+ * conceitualmente para `double`, recebe ruído gaussiano aditivo e volta a ser
+ * enviada como bytes.
+ *
+ * Para uma amostra de tensão `v`, a degradação simulada é:
+ * `v' = v + n`, com `n ~ N(noise_mu, noise_sigma^2)`. Logo, os parâmetros do
+ * construtor permitem variar a interferência média e sua dispersão, enquanto
+ * `noise_sigma == 0` mantém o canal ideal.
+ */
+
 #include "channel.hpp"
 #include "types.hpp"
 
@@ -20,8 +36,8 @@
 using namespace PhysicalLayer;
 
 namespace {
-
-void send_all(int fd, const bytes &data) {
+// Transmite dados do canal para o receptor
+void _send(int fd, const bytes &data) {
   size_t sent = 0;
   while (sent < data.size()) {
     ssize_t count = send(fd, data.data() + sent, data.size() - sent, 0);
@@ -34,7 +50,8 @@ void send_all(int fd, const bytes &data) {
   }
 }
 
-// Retorna o PID do processo que se conectou ao socket (0 se não for possível obter)
+// Retorna o PID do processo que se conectou ao socket (0 se não for possível
+// obter)
 uint32_t connected_pid(int fd) {
   struct ucred cred = {};
   socklen_t len = sizeof(cred);
@@ -60,14 +77,11 @@ Channel::Channel(double noise_mu, double noise_sigma)
 }
 
 void Channel::open() {
-  if (CHANNEL_DEBUG)
-    std::filesystem::create_directory("/tmp/channel");
-
   unlink(channel.sun_path);
 
   const char *errMessage = "Erro durante inicialização de canal.";
 
-  // Cria (ou zera) o arquivo de registro do sinal antes dos transceptores
+  // Cria (ou zera) o arquivo de visualização do sinal antes dos transceptores
   // conectarem
   if (!trace_path.empty()) {
     trace_fd =
@@ -126,7 +140,7 @@ void Channel::stream() {
             }
 
             signal.resize(n);
-            trace(TRACE_IN, i, signal);
+            trace(TRACE_IN, i, signal); // Registro de sinal sem ruído
 
             // Determina qual o destinatário dos dados
             int recipient = i == 1 ? fds[2].fd : fds[1].fd;
@@ -135,10 +149,14 @@ void Channel::stream() {
               break;
             }
 
-            add_noise(signal);
-            trace(TRACE_OUT, i, signal);
+            // Adiciona ruído, se aplicável
+            if (noise_sigma > 0.)
+              add_noise(signal);
 
-            send_all(recipient, signal);
+            trace(TRACE_OUT, i, signal); // Registro de sinal com ruído
+
+            // Retransmite dados ao receptor
+            _send(recipient, signal);
 
             signal.resize(BUF_SIZE);
           }
@@ -150,21 +168,24 @@ void Channel::stream() {
 }
 
 void Channel::close() {
+  // Fecha cada descritor de arquivo de socket
   for (auto fd : fds)
     ::close(fd.fd);
 
+  // Fecha descritor de arquivo de visualização de sinal
   if (trace_fd >= 0)
     ::close(trace_fd);
   trace_fd = -1;
 
+  // Deleta o arquivo de socket
   unlink(channel.sun_path);
 }
 
-// Registra um bloco de sinal no arquivo de registro (se habilitado)
 void Channel::trace(TraceStage stage, int sender, const bytes &signal) {
   if (trace_fd < 0)
     return;
 
+  // Constroi o cabeçalho do registro
   TraceHeader header = {};
   header.source_pid = peer_pid[sender];
   header.size = signal.size();
@@ -181,9 +202,6 @@ void Channel::trace(TraceStage stage, int sender, const bytes &signal) {
 }
 
 void Channel::add_noise(bytes &signal) {
-  if (noise_sigma == 0.)
-    return;
-
   const size_t bufsize = signal.size();
   assert(bufsize % sizeof(double) == 0);
 
