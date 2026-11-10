@@ -1,9 +1,11 @@
 #include "config/modem.hpp"
+#include "link_layer.hpp"
 #include "modem.hpp"
 #include "transceiver.hpp"
 #include <algorithm>
 #include <cstddef>
 #include <iostream>
+#include <mutex>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -11,19 +13,29 @@
 #include <vector>
 
 using namespace PhysicalLayer;
+using namespace LinkLayer;
 
-void tx(Transceiver *trx, const char *name) {
+namespace {
+std::mutex output_mutex;
+
+void emit_trace(const std::string &stage, const std::string &bits) {
+  std::lock_guard lock(output_mutex);
+  std::cout << "@LINK|" << stage << "|" << bits << std::endl;
+}
+}
+
+void tx(Transceiver *trx, LinkLayer::LinkLayer *link, const char *name) {
   std::string message;
   bytes message_bytes;
 
-  auto send_message = [&message_bytes, &trx](std::string m) {
+  auto send_message = [&message_bytes, &trx, &link](std::string m) {
     const std::byte *buf = reinterpret_cast<const std::byte *>(m.data());
-    message_bytes.insert(message_bytes.end(), buf, buf + m.size());
-    message_bytes.push_back(std::byte{0});
+    bytes payload(buf, buf + m.size());
 
     try {
+      message_bytes = link->encode(payload);
       trx->transmit(message_bytes);
-    } catch (std::runtime_error &e) {
+    } catch (const std::exception &e) {
       std::cerr << e.what() << std::endl;
     }
     message_bytes.clear();
@@ -49,36 +61,34 @@ void tx(Transceiver *trx, const char *name) {
   trx->shutdown();
 }
 
-void rx(Transceiver *trx) {
-  // Loop de camadas de rede (física -> enlace -> aplicação)
-  bytes received, chunk;
-  std::string message;
+void rx(Transceiver *trx, LinkLayer::LinkLayer *link) {
+  bytes chunk;
 
   while (true) {
     if (!trx->receive())
       break;
 
-    // Passagem e tratamento para a camada de enlace
     if (!trx->buffer.empty()) {
       chunk = trx->buffer.front();
       trx->buffer.pop_front();
 
-      received.insert(received.end(), chunk.begin(), chunk.end());
+      link->push(chunk, [trx](const DecodeResult &result) {
+        if (!result.accepted) {
+          emit_trace("erro-rx", result.error);
+          return;
+        }
 
-      if (received.size() > 255)
-        received.clear();
-
-      // Verificação de delimitador
-      if (!received.empty() && received.back() == std::byte{0}) {
-        message = reinterpret_cast<char *>(received.data());
-
-        // Remove quebra de linha ao final da mensagem
+        std::string message(reinterpret_cast<const char *>(result.payload.data()),
+                            result.payload.size());
         std::replace(message.begin(), message.end(), '\n', ' ');
-        std::cout << message << std::endl;
-
-        received.clear();
+        {
+          std::lock_guard lock(output_mutex);
+          std::cout << message << std::endl;
+        }
+        if (result.corrected)
+          emit_trace("hamming-corrigido", "1");
         trx->reset_modem();
-      }
+      });
     }
   }
 }
@@ -91,20 +101,33 @@ int main(int argc, char **argv) {
 
   const char *name = argv[1];
   std::vector<std::string> modem_args;
+  LinkLayer::Config link_config;
 
-  for (int i = 2; i < argc; i++)
-    modem_args.push_back(argv[i]);
+  for (int i = 2; i < argc; i++) {
+    const std::string arg = argv[i];
+    if (arg.rfind("framing=", 0) == 0)
+      link_config.framing = framing_from_name(arg.substr(8));
+    else if (arg.rfind("check=", 0) == 0)
+      link_config.check = check_from_name(arg.substr(6));
+    else if (arg.rfind("max_frame=", 0) == 0)
+      link_config.max_frame_size = std::stoul(arg.substr(10));
+    else
+      modem_args.push_back(arg);
+  }
 
   try {
     std::shared_ptr<PhysicalLayer::Modem> modem =
         Config::Modem::make_modem(Config::Modem::parse_args(modem_args));
 
     Transceiver trx(modem);
+    LinkLayer::LinkLayer tx_link(link_config), rx_link(link_config);
+    tx_link.set_trace_callback(emit_trace);
+    rx_link.set_trace_callback(emit_trace);
 
     trx.connect();
 
-    std::thread tx_t(tx, &trx, name);
-    std::thread rx_t(rx, &trx);
+    std::thread tx_t(tx, &trx, &tx_link, name);
+    std::thread rx_t(rx, &trx, &rx_link);
 
     tx_t.join();
     rx_t.join();

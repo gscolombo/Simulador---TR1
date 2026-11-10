@@ -2,6 +2,7 @@
 #define CONFIG_WINDOW_H
 
 #include "chat_window.hpp"
+#include "link_window.hpp"
 #include "signal_window.hpp"
 #include "simulator.hpp"
 #include <array>
@@ -27,6 +28,8 @@ private:
   void on_start();
   void on_stop();
   void on_message(PeerId peer, const std::string &text);
+  void on_link_event(PeerId peer, const std::string &stage,
+                     const std::string &bits);
   void on_peer_exited(PeerId peer);
   void on_finished();
   void on_failed(const std::string &reason);
@@ -35,6 +38,7 @@ private:
   void destroy_chats();
   void show_chats();
   void show_signals();
+  void show_link();
   void set_status(const std::string &text);
   void set_running(bool running);
 
@@ -45,20 +49,22 @@ private:
   Simulator simulator;
   std::array<std::unique_ptr<ChatWindow>, 2> chats;
   std::unique_ptr<SignalWindow> signals;
+  std::unique_ptr<LinkWindow> link_view;
   std::string trace_path; // Traço do sinal gravado pelo canal
 
   Gtk::Box root{Gtk::Orientation::VERTICAL, 10};
   Gtk::Grid form;
   Gtk::Entry name_a, name_b;
-  Gtk::DropDown modulation;
+  Gtk::DropDown modulation, framing, check_type;
   Gtk::SpinButton sample_size_spin, bitrate_spin, amplitude_spin, carrier_spin,
-      deviation_spin, mu_spin, sigma_spin;
+      deviation_spin, mu_spin, sigma_spin, max_frame_spin;
   std::vector<Gtk::SpinButton *> spins;
 
   Gtk::Label summary_label, status_label;
   Gtk::Box buttons{Gtk::Orientation::HORIZONTAL, 6};
   Gtk::Button start_button{"Iniciar"}, stop_button{"Parar"},
-      chats_button{"Mostrar chats"}, signals_button{"Mostrar sinais"};
+      chats_button{"Mostrar chats"}, signals_button{"Mostrar sinais"},
+      link_button{"Mostrar enlace"};
 };
 
 } // namespace Gui

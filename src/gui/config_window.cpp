@@ -1,4 +1,5 @@
 #include "gui/config_window.hpp"
+#include "link_layer.hpp"
 
 #include <cstdio>
 #include <filesystem>
@@ -31,6 +32,14 @@ ConfigWindow::ConfigWindow() {
     if (Config::Modem::all_modem_types()[i] == defaults.modem.type)
       modulation.set_selected(i);
 
+  framing.set_model(Gtk::StringList::create({"Contagem de caracteres",
+                                             "Entrelaçamento de bits",
+                                             "Byte stuffing", "Bit stuffing"}));
+  framing.set_selected(2);
+  check_type.set_model(Gtk::StringList::create({"Nenhum", "Paridade par", "Checksum",
+                                                "CRC-32", "Hamming"}));
+  check_type.set_selected(3);
+
   setup_spin(sample_size_spin, defaults.modem.sample_size, 1, 1e6, 100, 0);
   setup_spin(bitrate_spin, defaults.modem.bitrate, 1, 1e7, 100, 0);
   setup_spin(amplitude_spin, defaults.modem.amplitude, 0.01, 1000, 0.5, 2);
@@ -38,8 +47,9 @@ ConfigWindow::ConfigWindow() {
   setup_spin(deviation_spin, defaults.modem.freq_deviation, 0, 1e9, 100, 0);
   setup_spin(mu_spin, defaults.noise_mu, -1000, 1000, 1, 2);
   setup_spin(sigma_spin, defaults.noise_sigma, 0, 1000, 0.5, 2);
+  setup_spin(max_frame_spin, defaults.link.max_frame_size, 1, 65535, 1, 0);
   spins = {&sample_size_spin, &bitrate_spin, &amplitude_spin, &carrier_spin,
-           &deviation_spin,   &mu_spin,      &sigma_spin};
+           &deviation_spin,   &mu_spin,      &sigma_spin, &max_frame_spin};
 
   form.set_row_spacing(6);
   form.set_column_spacing(12);
@@ -53,6 +63,9 @@ ConfigWindow::ConfigWindow() {
   add_row(7, "Desvio de frequência FSK (Hz)", deviation_spin);
   add_row(8, "Ruído: média μ (V)", mu_spin);
   add_row(9, "Ruído: desvio padrão σ (V)", sigma_spin);
+  add_row(10, "Enquadramento", framing);
+  add_row(11, "Detecção/correção", check_type);
+  add_row(12, "Tamanho máximo do quadro (bytes)", max_frame_spin);
 
   summary_label.set_xalign(0);
   summary_label.set_wrap(true);
@@ -67,6 +80,7 @@ ConfigWindow::ConfigWindow() {
   buttons.append(stop_button);
   buttons.append(chats_button);
   buttons.append(signals_button);
+  buttons.append(link_button);
 
   root.set_margin(12);
   root.append(form);
@@ -94,9 +108,13 @@ ConfigWindow::ConfigWindow() {
       sigc::mem_fun(*this, &ConfigWindow::show_chats));
   signals_button.signal_clicked().connect(
       sigc::mem_fun(*this, &ConfigWindow::show_signals));
+    link_button.signal_clicked().connect(
+      sigc::mem_fun(*this, &ConfigWindow::show_link));
 
   simulator.signal_message.connect(
       sigc::mem_fun(*this, &ConfigWindow::on_message));
+    simulator.signal_link_event.connect(
+      sigc::mem_fun(*this, &ConfigWindow::on_link_event));
   simulator.signal_peer_exited.connect(
       sigc::mem_fun(*this, &ConfigWindow::on_peer_exited));
   simulator.signal_finished.connect(
@@ -110,6 +128,7 @@ ConfigWindow::ConfigWindow() {
         simulator.stop();
         destroy_chats();
         signals.reset();
+        link_view.reset();
 
         std::error_code ignored;
         std::filesystem::remove(trace_path, ignored);
@@ -119,6 +138,7 @@ ConfigWindow::ConfigWindow() {
 
   set_running(false);
   signals_button.set_sensitive(false);
+  link_button.set_sensitive(false);
   update_form();
 }
 
@@ -153,6 +173,18 @@ SimulatorConfig ConfigWindow::read_config() const {
   config.modem.freq_deviation = deviation_spin.get_value();
   config.noise_mu = mu_spin.get_value();
   config.noise_sigma = sigma_spin.get_value();
+    const std::array<LinkLayer::FramingType, 4> framing_types = {
+      LinkLayer::FramingType::CharacterCount,
+      LinkLayer::FramingType::BitInterleaving,
+      LinkLayer::FramingType::ByteStuffing,
+      LinkLayer::FramingType::BitStuffing};
+    const std::array<LinkLayer::CheckType, 5> check_types = {
+      LinkLayer::CheckType::None, LinkLayer::CheckType::EvenParity,
+      LinkLayer::CheckType::Checksum, LinkLayer::CheckType::CRC32,
+      LinkLayer::CheckType::Hamming};
+    config.link.framing = framing_types.at(framing.get_selected());
+    config.link.check = check_types.at(check_type.get_selected());
+    config.link.max_frame_size = (size_t)max_frame_spin.get_value();
 
   return config;
 }
@@ -206,6 +238,7 @@ void ConfigWindow::on_start() {
 
   destroy_chats();
   signals.reset();
+  link_view.reset();
 
   // O canal recria o arquivo de traço ao iniciar
   std::error_code ignored;
@@ -217,6 +250,7 @@ void ConfigWindow::on_start() {
   } catch (const std::exception &e) {
     set_running(false);
     signals_button.set_sensitive(false);
+    link_button.set_sensitive(false);
     set_status(e.what());
     return;
   }
@@ -229,6 +263,8 @@ void ConfigWindow::on_start() {
       std::array<pid_t, 2>{simulator.peer_pid(PEER_A),
                            simulator.peer_pid(PEER_B)});
   signals_button.set_sensitive(true);
+  link_view = std::make_unique<LinkWindow>(config.names);
+  link_button.set_sensitive(true);
 
   set_running(true);
   set_status("Simulação em execução.");
@@ -239,6 +275,7 @@ void ConfigWindow::on_stop() {
   destroy_chats();
   if (signals)
     signals->finish();
+  link_view.reset();
   set_running(false);
   set_status("Simulação parada.");
 }
@@ -246,6 +283,12 @@ void ConfigWindow::on_stop() {
 void ConfigWindow::on_message(PeerId peer, const std::string &text) {
   if (chats[peer])
     chats[peer]->show_received(text);
+}
+
+void ConfigWindow::on_link_event(PeerId peer, const std::string &stage,
+                                 const std::string &bits) {
+  if (link_view)
+    link_view->show_event(peer, stage, bits);
 }
 
 void ConfigWindow::on_peer_exited(PeerId peer) {
@@ -260,6 +303,7 @@ void ConfigWindow::on_finished() {
   destroy_chats();
   if (signals)
     signals->finish();
+  link_view.reset();
   set_running(false);
   set_status("Simulação encerrada: todos os peers saíram.");
 }
@@ -268,6 +312,7 @@ void ConfigWindow::on_failed(const std::string &reason) {
   destroy_chats();
   if (signals)
     signals->finish();
+  link_view.reset();
   set_running(false);
   set_status("Falha na simulação: " + reason);
 }
@@ -301,6 +346,11 @@ void ConfigWindow::show_signals() {
     signals->present();
 }
 
+void ConfigWindow::show_link() {
+  if (link_view)
+    link_view->present();
+}
+
 void ConfigWindow::set_status(const std::string &text) {
   // Mensagens de erro podem conter saída de processos em bytes arbitrários
   gchar *valid = g_utf8_make_valid(text.c_str(), text.size());
@@ -312,4 +362,5 @@ void ConfigWindow::set_running(bool running) {
   start_button.set_label(running ? "Reiniciar" : "Iniciar");
   stop_button.set_sensitive(running);
   chats_button.set_sensitive(running);
+  link_button.set_sensitive(running && link_view != nullptr);
 }

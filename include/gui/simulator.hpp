@@ -2,6 +2,7 @@
 #define SIMULATOR_H
 
 #include "config/modem.hpp"
+#include "link_layer.hpp"
 #include <array>
 #include <glibmm.h>
 #include <string>
@@ -15,6 +16,7 @@ enum PeerId { PEER_A = 0, PEER_B = 1 };
 // Parâmetros usados para iniciar os processos do simulador
 struct SimulatorConfig {
   Config::Modem::ModemConfig modem;
+  LinkLayer::Config link;
   double noise_mu = 0.;    // V
   double noise_sigma = 1.; // V
   std::array<std::string, 2> names = {"Alice", "Bob"};
@@ -49,6 +51,8 @@ public:
 
   // Mensagem recebida pelo peer (já decodificada pelas camadas inferiores)
   sigc::signal<void(PeerId, const std::string &)> signal_message;
+  sigc::signal<void(PeerId, const std::string &, const std::string &)>
+      signal_link_event;
   // Peer encerrou normalmente
   sigc::signal<void(PeerId)> signal_peer_exited;
   // Todos os processos encerraram normalmente

@@ -75,6 +75,16 @@ void Simulator::start(const SimulatorConfig &config) {
     // Inicia processo dos peers
     for (size_t i = 0; i < 2; i++) {
       std::vector<std::string> args = {config.names[i]};
+      const char *framing = config.link.framing == LinkLayer::FramingType::CharacterCount
+                ? "contagem"
+                : config.link.framing == LinkLayer::FramingType::BitInterleaving
+                  ? "entrelacamento"
+                  : config.link.framing == LinkLayer::FramingType::ByteStuffing
+                    ? "byte-stuffing"
+                    : "bit-stuffing";
+      args.push_back(std::string("framing=") + framing);
+      args.push_back(std::string("check=") + LinkLayer::check_name(config.link.check));
+      args.push_back("max_frame=" + std::to_string(config.link.max_frame_size));
       for (auto &arg : Config::Modem::to_args(config.modem))
         args.push_back(arg);
 
@@ -282,7 +292,14 @@ void Simulator::on_stdout_data(size_t index, const char *data, size_t size) {
     child.out_buffer.erase(0,
                            eol + 1); // Limpa o buffer do processo filho (peer)
 
-    signal_message.emit(PeerId(index - 1), line);
+    if (line.rfind("@LINK|", 0) == 0) {
+      size_t separator = line.find('|', 6);
+      if (separator != std::string::npos)
+        signal_link_event.emit(PeerId(index - 1), line.substr(6, separator - 6),
+                               line.substr(separator + 1));
+    } else {
+      signal_message.emit(PeerId(index - 1), line);
+    }
   }
 }
 
