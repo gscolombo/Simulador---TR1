@@ -1,5 +1,6 @@
 #include "gui/config_window.hpp"
 #include "link_layer.hpp"
+#include "modem.hpp"
 
 #include <cstdio>
 #include <filesystem>
@@ -7,8 +8,7 @@
 #include <unistd.h>
 
 using namespace Gui;
-using namespace PhysicalLayer;
-using namespace Config;
+using namespace PhysicalLayer::Config;
 
 ConfigWindow::ConfigWindow() {
   set_title("Simulador TR1 — Configuração");
@@ -25,19 +25,19 @@ ConfigWindow::ConfigWindow() {
   name_b.set_max_length(32);
 
   auto labels = Gtk::StringList::create({});
-  for (Config::Modem::ModemType type : Config::Modem::all_modem_types())
+  for (ModemType type : all_modem_types())
     labels->append(modem_label(type));
   modulation.set_model(labels);
-  for (size_t i = 0; i < Config::Modem::all_modem_types().size(); i++)
-    if (Config::Modem::all_modem_types()[i] == defaults.modem.type)
+  for (size_t i = 0; i < all_modem_types().size(); i++)
+    if (all_modem_types()[i] == defaults.modem.type)
       modulation.set_selected(i);
 
   framing.set_model(Gtk::StringList::create({"Contagem de caracteres",
                                              "Entrelaçamento de bits",
                                              "Byte stuffing", "Bit stuffing"}));
   framing.set_selected(2);
-  check_type.set_model(Gtk::StringList::create({"Nenhum", "Paridade par", "Checksum",
-                                                "CRC-32", "Hamming"}));
+  check_type.set_model(Gtk::StringList::create(
+      {"Nenhum", "Paridade par", "Checksum", "CRC-32", "Hamming"}));
   check_type.set_selected(3);
 
   setup_spin(sample_size_spin, defaults.modem.sample_size, 1, 1e6, 100, 0);
@@ -49,7 +49,7 @@ ConfigWindow::ConfigWindow() {
   setup_spin(sigma_spin, defaults.noise_sigma, 0, 1000, 0.5, 2);
   setup_spin(max_frame_spin, defaults.link.max_frame_size, 1, 65535, 1, 0);
   spins = {&sample_size_spin, &bitrate_spin, &amplitude_spin, &carrier_spin,
-           &deviation_spin,   &mu_spin,      &sigma_spin, &max_frame_spin};
+           &deviation_spin,   &mu_spin,      &sigma_spin,     &max_frame_spin};
 
   form.set_row_spacing(6);
   form.set_column_spacing(12);
@@ -108,12 +108,12 @@ ConfigWindow::ConfigWindow() {
       sigc::mem_fun(*this, &ConfigWindow::show_chats));
   signals_button.signal_clicked().connect(
       sigc::mem_fun(*this, &ConfigWindow::show_signals));
-    link_button.signal_clicked().connect(
+  link_button.signal_clicked().connect(
       sigc::mem_fun(*this, &ConfigWindow::show_link));
 
   simulator.signal_message.connect(
       sigc::mem_fun(*this, &ConfigWindow::on_message));
-    simulator.signal_link_event.connect(
+  simulator.signal_link_event.connect(
       sigc::mem_fun(*this, &ConfigWindow::on_link_event));
   simulator.signal_peer_exited.connect(
       sigc::mem_fun(*this, &ConfigWindow::on_peer_exited));
@@ -165,7 +165,7 @@ SimulatorConfig ConfigWindow::read_config() const {
 
   config.names = {name_a.get_text().raw(), name_b.get_text().raw()};
   config.modem.type =
-      Config::Modem::all_modem_types().at(modulation.get_selected());
+      PhysicalLayer::Config::all_modem_types().at(modulation.get_selected());
   config.modem.sample_size = (size_t)sample_size_spin.get_value();
   config.modem.bitrate = bitrate_spin.get_value();
   config.modem.amplitude = amplitude_spin.get_value();
@@ -173,18 +173,18 @@ SimulatorConfig ConfigWindow::read_config() const {
   config.modem.freq_deviation = deviation_spin.get_value();
   config.noise_mu = mu_spin.get_value();
   config.noise_sigma = sigma_spin.get_value();
-    const std::array<LinkLayer::FramingType, 4> framing_types = {
+  const std::array<LinkLayer::FramingType, 4> framing_types = {
       LinkLayer::FramingType::CharacterCount,
       LinkLayer::FramingType::BitInterleaving,
       LinkLayer::FramingType::ByteStuffing,
       LinkLayer::FramingType::BitStuffing};
-    const std::array<LinkLayer::CheckType, 5> check_types = {
+  const std::array<LinkLayer::CheckType, 5> check_types = {
       LinkLayer::CheckType::None, LinkLayer::CheckType::EvenParity,
       LinkLayer::CheckType::Checksum, LinkLayer::CheckType::CRC32,
       LinkLayer::CheckType::Hamming};
-    config.link.framing = framing_types.at(framing.get_selected());
-    config.link.check = check_types.at(check_type.get_selected());
-    config.link.max_frame_size = (size_t)max_frame_spin.get_value();
+  config.link.framing = framing_types.at(framing.get_selected());
+  config.link.check = check_types.at(check_type.get_selected());
+  config.link.max_frame_size = (size_t)max_frame_spin.get_value();
 
   return config;
 }
@@ -205,7 +205,7 @@ void ConfigWindow::update_form() {
   // Campos que não se aplicam à modulação escolhida ficam desabilitados
   carrier_spin.set_sensitive(is_passband(config.modem.type));
   deviation_spin.set_sensitive(config.modem.type ==
-                               Config::Modem::ModemType::FSK);
+                               PhysicalLayer::Config::ModemType::FSK);
 
   std::string error = check(config);
   if (error.empty()) {

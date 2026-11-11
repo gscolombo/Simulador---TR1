@@ -1,13 +1,12 @@
 #ifndef SIMULATOR_H
 #define SIMULATOR_H
 
-#include "config/modem.hpp"
 #include "link_layer.hpp"
+#include "modem.hpp"
 #include <array>
 #include <glibmm.h>
 #include <string>
 #include <sys/types.h>
-
 
 namespace Gui {
 
@@ -15,7 +14,7 @@ enum PeerId { PEER_A = 0, PEER_B = 1 };
 
 // Parâmetros usados para iniciar os processos do simulador
 struct SimulatorConfig {
-  Config::Modem::ModemConfig modem;
+  PhysicalLayer::Config::ModemConfig modem;
   LinkLayer::Config link;
   double noise_mu = 0.;    // V
   double noise_sigma = 1.; // V

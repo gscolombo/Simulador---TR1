@@ -1,30 +1,31 @@
-#include "config/modem.hpp"
 #include "link_layer.hpp"
 #include "modem.hpp"
 #include "transceiver.hpp"
 #include <algorithm>
 #include <cstddef>
 #include <iostream>
-#include <mutex>
 #include <memory>
-#include <stdexcept>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
 
 using namespace PhysicalLayer;
+
+namespace LL = LinkLayer;
 using namespace LinkLayer;
 
 namespace {
-std::mutex output_mutex;
+std::mutex output_mutex; // Mutex para escrita em stdout
 
+/* Escreve dados de saída da camada de enlace na saída padrão */
 void emit_trace(const std::string &stage, const std::string &bits) {
   std::lock_guard lock(output_mutex);
   std::cout << "@LINK|" << stage << "|" << bits << std::endl;
 }
-}
+} // namespace
 
-void tx(Transceiver *trx, LinkLayer::LinkLayer *link, const char *name) {
+void tx(Transceiver *trx, LL::LinkLayer *link, const char *name) {
   std::string message;
   bytes message_bytes;
 
@@ -61,7 +62,7 @@ void tx(Transceiver *trx, LinkLayer::LinkLayer *link, const char *name) {
   trx->shutdown();
 }
 
-void rx(Transceiver *trx, LinkLayer::LinkLayer *link) {
+void rx(Transceiver *trx, LL::LinkLayer *link) {
   bytes chunk;
 
   while (true) {
@@ -78,8 +79,9 @@ void rx(Transceiver *trx, LinkLayer::LinkLayer *link) {
           return;
         }
 
-        std::string message(reinterpret_cast<const char *>(result.payload.data()),
-                            result.payload.size());
+        std::string message(
+            reinterpret_cast<const char *>(result.payload.data()),
+            result.payload.size());
         std::replace(message.begin(), message.end(), '\n', ' ');
         {
           std::lock_guard lock(output_mutex);
@@ -101,7 +103,7 @@ int main(int argc, char **argv) {
 
   const char *name = argv[1];
   std::vector<std::string> modem_args;
-  LinkLayer::Config link_config;
+  LL::Config link_config;
 
   for (int i = 2; i < argc; i++) {
     const std::string arg = argv[i];
@@ -117,10 +119,11 @@ int main(int argc, char **argv) {
 
   try {
     std::shared_ptr<PhysicalLayer::Modem> modem =
-        Config::Modem::make_modem(Config::Modem::parse_args(modem_args));
+        PhysicalLayer::Config::make_modem(
+            PhysicalLayer::Config::parse_args(modem_args));
 
     Transceiver trx(modem);
-    LinkLayer::LinkLayer tx_link(link_config), rx_link(link_config);
+    LL::LinkLayer tx_link(link_config), rx_link(link_config);
     tx_link.set_trace_callback(emit_trace);
     rx_link.set_trace_callback(emit_trace);
 

@@ -5,6 +5,7 @@
 #ifndef UTILS_HPP
 #define UTILS_HPP
 
+#include "types.hpp"
 #include <string>
 #include <sys/un.h>
 /**
@@ -21,5 +22,12 @@ int check_err(int err, const char *message);
 // argumentos de linha de comando dos processos)
 std::string number_to_string(double value);
 double string_to_number(const std::string &text);
+
+/**
+ * @brief Função auxiliar para enviar um vetor de bytes completo a um socket
+ * @param fd Descritor do arquivo de escrita
+ * @param data Vetor de bytes para envio
+ */
+void _send(int fd, const PhysicalLayer::bytes &data);
 
 #endif

@@ -75,17 +75,19 @@ void Simulator::start(const SimulatorConfig &config) {
     // Inicia processo dos peers
     for (size_t i = 0; i < 2; i++) {
       std::vector<std::string> args = {config.names[i]};
-      const char *framing = config.link.framing == LinkLayer::FramingType::CharacterCount
-                ? "contagem"
-                : config.link.framing == LinkLayer::FramingType::BitInterleaving
-                  ? "entrelacamento"
-                  : config.link.framing == LinkLayer::FramingType::ByteStuffing
-                    ? "byte-stuffing"
-                    : "bit-stuffing";
+      const char *framing =
+          config.link.framing == LinkLayer::FramingType::CharacterCount
+              ? "contagem"
+          : config.link.framing == LinkLayer::FramingType::BitInterleaving
+              ? "entrelacamento"
+          : config.link.framing == LinkLayer::FramingType::ByteStuffing
+              ? "byte-stuffing"
+              : "bit-stuffing";
       args.push_back(std::string("framing=") + framing);
-      args.push_back(std::string("check=") + LinkLayer::check_name(config.link.check));
+      args.push_back(std::string("check=") +
+                     LinkLayer::check_name(config.link.check));
       args.push_back("max_frame=" + std::to_string(config.link.max_frame_size));
-      for (auto &arg : Config::Modem::to_args(config.modem))
+      for (auto &arg : PhysicalLayer::Config::to_args(config.modem))
         args.push_back(arg);
 
       spawn(i + 1, "peer " + config.names[i], "peer", args, true);

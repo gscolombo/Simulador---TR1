@@ -2,14 +2,14 @@
 #include "modem.hpp"
 
 using namespace Gui;
-using namespace PhysicalLayer;
+using namespace PhysicalLayer::Config;
 
 namespace {
 constexpr int REFRESH_INTERVAL_MS = 50;
 }
 
 SignalWindow::SignalWindow(const std::array<std::string, 2> &names,
-                           const Config::Modem::ModemConfig &modem,
+                           const ModemConfig &modem,
                            const std::string &trace_path,
                            const std::array<pid_t, 2> &peer_pids)
     : reader(trace_path) {

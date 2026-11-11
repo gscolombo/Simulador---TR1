@@ -24,7 +24,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
-#include <filesystem>
 #include <iostream>
 #include <random>
 #include <stdexcept>
@@ -36,20 +35,6 @@
 using namespace PhysicalLayer;
 
 namespace {
-// Transmite dados do canal para o receptor
-void _send(int fd, const bytes &data) {
-  size_t sent = 0;
-  while (sent < data.size()) {
-    ssize_t count = send(fd, data.data() + sent, data.size() - sent, 0);
-    if (count < 0 && errno == EINTR)
-      continue;
-    check_err(count, "Erro durante transmissão de dados pelo canal.");
-    if (count == 0)
-      throw std::runtime_error("Socket encerrou durante transmissão.");
-    sent += (size_t)count;
-  }
-}
-
 // Retorna o PID do processo que se conectou ao socket (0 se não for possível
 // obter)
 uint32_t connected_pid(int fd) {

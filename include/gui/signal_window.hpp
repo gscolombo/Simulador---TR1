@@ -1,7 +1,7 @@
 #ifndef SIGNAL_WINDOW_H
 #define SIGNAL_WINDOW_H
 
-#include "config/modem.hpp"
+#include "modem.hpp"
 #include "signal_plot.hpp"
 #include "trace_reader.hpp"
 #include <array>
@@ -20,8 +20,7 @@ namespace Gui {
 class SignalWindow : public Gtk::Window {
 public:
   SignalWindow(const std::array<std::string, 2> &names,
-               const Config::Modem::ModemConfig &modem,
-               const std::string &trace_path,
+               const Config::ModemConfig &modem, const std::string &trace_path,
                const std::array<pid_t, 2> &peer_pids);
   ~SignalWindow() override;
 
