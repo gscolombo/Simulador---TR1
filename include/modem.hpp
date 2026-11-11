@@ -243,7 +243,13 @@ protected:
 /** @brief Modulação 8-PSK com oito pontos na constelação. */
 class _8PSKModem : public QAM {
 public:
-  /** Configura um modem 8-PSK de três bits por símbolo. */
+  /**
+   * Define uma constelação de símbolos com com 8 pontos em um anel de raio A.
+   *
+   * Cada símbolo carrega 3 bits de fase, em código Gray (000, 001, 011, 010,
+   * 110, 111, 101 e 100), em sentido anti-horário a partir do primeiro ponto do
+   * anel.
+   */
   _8PSKModem(size_t sample_size, double fc, double bitrate, double A);
 
   /** Cria uma cópia polimórfica do modem 8-PSK. */
@@ -255,7 +261,17 @@ public:
 /** @brief Modulação 32-QAM com trinta e dois pontos na constelação. */
 class _32QAM : public QAM {
 public:
-  /** Configura um modem 32-QAM de cinco bits por símbolo. */
+  /**
+   * Define uma constelação de símbolos com 4 anéis de 8 pontos (raios 1 a 4, em
+   * unidades de A).
+   *
+   * Cada símbolo carrega 5 bits:
+   *  - 2 bits de anel, em código Gray: r = 1 -> 00, 2 -> 01, 3 -> 11, 4 -> 10;
+   *  - 3 bits de fase, em código Gray (000, 001, 011, 010, 110, 111, 101, 100),
+   *    em sentido anti-horário a partir do primeiro ponto do anel (similar ao
+   * 8PSK). Os anéis 2 e 4 são rotacionados em 22,5° em relação aos anéis 1 e 3,
+   * e o sinal tem pico de 4A.
+   */
   _32QAM(size_t sample_size, double fc, double bitrate, double A);
 
   /** Cria uma cópia polimórfica do modem 32-QAM. */
@@ -268,6 +284,45 @@ protected:
   const double cos22 = cos(22.5 * (PI / 180));
   const double sin22 = sin(22.5 * (PI / 180));
 };
+
+/*
+  Funções e estruturas para configuração da camada física (modem) na GUI
+*/
+namespace Config {
+enum class ModemType { NRZPolar, Manchester, Bipolar, ASK, FSK, PSK8, QAM32 };
+
+/*
+  Parâmetros de configuração de um modem.
+*/
+struct ModemConfig {
+  ModemType type = ModemType::NRZPolar;
+  size_t sample_size = 100;    // Amostras por símbolo
+  double carrier_freq = 10e3;  // Hz (somente banda passante)
+  double bitrate = 1e3;        // bits/s
+  double amplitude = 3.3;      // V
+  double freq_deviation = 1e3; // Hz (somente FSK)
+
+  size_t bits_per_symbol() const;
+  double baud() const { return bitrate / (double)bits_per_symbol(); }
+};
+
+const std::vector<ModemType> &all_modem_types();
+const char *modem_label(ModemType type);
+bool is_passband(ModemType type);
+
+/*
+  Verifica as restrições dos construtores dos modems (que abortam o processo
+  por `assert`). Retorna uma mensagem de erro, ou string vazia se válido.
+*/
+std::string validate(const ModemConfig &config);
+
+// Lança std::invalid_argument se a configuração for inválida
+std::shared_ptr<PhysicalLayer::Modem> make_modem(const ModemConfig &config);
+
+// Conversão de/para argumentos de linha de comando ("chave=valor")
+std::vector<std::string> to_args(const ModemConfig &config);
+ModemConfig parse_args(const std::vector<std::string> &args);
+} // namespace Config
 
 } // namespace PhysicalLayer
 

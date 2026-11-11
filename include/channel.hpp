@@ -6,19 +6,21 @@
 #ifndef CHANNEL_H
 #define CHANNEL_H
 
+#define INIT_POLLFD {-1, POLLIN, 0}
+
+#include "gui/signal_trace.hpp"
 #include "types.hpp"
 #include <random>
+#include <string>
 #include <sys/poll.h>
 #include <sys/socket.h>
 
 namespace PhysicalLayer {
 
-#define CHANNEL_DEBUG true
-
 /**
  * @brief Canal físico bidirecional entre dois transceptores.
  * @details
- * O canal representa o meio de comunicação por meio de amostras elétricas de
+ * O canal representa o meio de comunicação por meio de amostras de sinais elétricos de
  * tensão. O modem produz cada amostra como um `double` em volts, e este objeto
  * apenas transporta a representação binária dessas amostras entre os dois
  * transceptores conectados por sockets Unix locais.
@@ -27,10 +29,10 @@ namespace PhysicalLayer {
  * branco gaussiano aditivo (AWGN) diretamente nas amostras de tensão. Para
  * cada amostra `v`, é aplicado `v' = v + n`, em que
  * `n ~ N(noise_mu, noise_sigma^2)`. Assim, `noise_mu` controla a média do
- * ruído e `noise_sigma` controla seu desvio padrão. Quando `noise_sigma` é
- * zero, o sinal é encaminhado sem alteração.
+ * ruído (componente DC) e `noise_sigma` controla seu desvio padrão. 
+ * Quando `noise_sigma` é zero, o sinal é encaminhado sem adição de ruído.
  *
- * A implementação usa sockets apenas como mecanismo de transporte entre as
+ * A implementação usa sockets apenas como mecanismo de comunicação entre as
  * threads/processos; eles não substituem a grandeza física do sinal, que é a
  * sequência de valores de tensão gerada pelo modem.
  */
@@ -57,7 +59,7 @@ public:
    * @brief Encaminha sinais entre os transceptores.
    * @details Aguarda dados em qualquer conexão, interpreta o bloco recebido
    * como amostras `double` de tensão, adiciona o AWGN configurado e envia o
-   * bloco ao outro transceptor. O loop termina quando as duas conexões são
+   * bloco ao outro transceptor. Retorna quando as duas conexões são
    * encerradas.
    */
   void stream();
@@ -68,6 +70,10 @@ public:
    */
   void close();
 
+  // Habilita a gravação do sinal (antes e depois do ruído) em arquivo, no
+  // formato descrito em signal_trace.hpp.
+  void set_trace_file(const std::string &path) { trace_path = path; }
+
 protected:
 private:
   /** Descritor do socket de escuta do canal. */
@@ -76,12 +82,7 @@ private:
    * @brief Estrutura de socket do canal.
    * @details Esta estrutura representa o socket do canal de comunicação.
    */
-  struct pollfd fds[3];
-  /**
-   * @brief Estrutura de endereço do canal.
-   * @details Esta estrutura representa o endereço do socket do canal de comunicação.
-   */
-  struct sockaddr_un channel;
+  struct pollfd fds[3] = {INIT_POLLFD, INIT_POLLFD, INIT_POLLFD};
   /**
    * @brief Média do ruído gaussiano.
    * @details Esta variável armazena a média do ruído gaussiano a ser adicionado ao sinal.
@@ -97,6 +98,11 @@ private:
   /** Distribuição normal configurada com a média e o desvio do ruído. */
   std::normal_distribution<double> dist;
 
+  /* Caminho para arquivo de visualização de sinal */
+  std::string trace_path;
+  int trace_fd = -1; // Descritor do arquivo de visualização de sinal
+  uint32_t peer_pid[3] = {0, 0, 0}; // PID do processo conectado em cada fds[i]
+
   /**
    * @brief Adiciona AWGN diretamente às amostras elétricas.
    * @details Reinterpreta o bloco como uma sequência de valores `double` em
@@ -105,6 +111,16 @@ private:
    * @param signal Bloco de amostras de tensão a ser alterado em volts.
    */
   void add_noise(bytes &signal);
+  /**
+   * @brief Registra uma amostra do sinal elétrico recebido/transmitido pelo canal.
+   * @details O arquivo para visualização do sinal é formado com registros de amostras
+   * com um cabeçalho contendo o PID do processo remetente, o tamanho da amostra em bytes, o
+   * tempo em que foi processada e o estado do sinal (antes ou após adição de ruído).
+   * @param stage Estágio do sinal durante passagem pelo canal (antes ou após adição de ruído)
+   * @param sender PID do processo remetente
+   * @param signal Amostra de sinal elétrico em bytes
+  */
+  void trace(TraceStage stage, int sender, const bytes &signal);
 };
 
 } // namespace PhysicalLayer

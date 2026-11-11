@@ -17,7 +17,9 @@
 
 namespace PhysicalLayer {
 
-/** Sequência de bytes usada para dados e sinais serializados. */
+/** Sequência de bytes usada para transmissão de dados e sinais 
+    serializados entre processos/threads.
+*/
 typedef std::vector<std::byte> bytes;
 /** Bit lógico; seus valores válidos são 0 e 1. */
 typedef uint8_t bit;

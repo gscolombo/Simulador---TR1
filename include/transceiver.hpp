@@ -7,7 +7,6 @@
 
 #include "modem.hpp"
 #include "types.hpp"
-#include <atomic>
 #include <deque>
 #include <sys/types.h>
 #include <sys/un.h>
@@ -24,9 +23,7 @@ namespace PhysicalLayer {
  */
 class Transceiver {
 public:
-  /** Indica que o transmissor terminou de preparar seus dados. */
-  std::atomic<bool> tx_ready = false, rx_ready = false;
-  /** Blocos de dados demodulados aguardando processamento. */
+  /** Buffer FIFO de dados demodulados aguardando processamento. */
   std::deque<bytes> buffer;
 
   /**

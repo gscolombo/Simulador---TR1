@@ -8,7 +8,6 @@
  */
 
 #include "transceiver.hpp"
-#include "channel.hpp"
 #include "types.hpp"
 #include "utils.hpp"
 
@@ -81,19 +80,10 @@ void Transceiver::shutdown() {
 }
 
 void Transceiver::transmit(const bytes &message) {
-  if (CHANNEL_DEBUG) {
-    if (std::filesystem::exists("/tmp/channel/in"))
-      truncate("/tmp/channel/in", 0);
-
-    if (std::filesystem::exists("/tmp/channel/out"))
-      truncate("/tmp/channel/out", 0);
-  }
-
   bytes signal;
   modem->toVolts(message, signal);
 
-  check_err(send(channel_sock, signal.data(), signal.size(), 0),
-            "Erro durante envio de mensagem.");
+  _send(channel_sock, signal);
 }
 
 ssize_t Transceiver::receive() {
