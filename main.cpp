@@ -1,27 +1,12 @@
+#include "gui/config_window.hpp"
 #include <csignal>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <unistd.h>
+#include <gtkmm.h>
 
-int main() {
-  int status;
-  pid_t channel_p, alice_p, bob_p;
+int main(int argc, char **argv) {
+  // Escrever em um peer que já terminou não deve encerrar a interface
+  std::signal(SIGPIPE, SIG_IGN);
 
-  if ((channel_p = fork()) == -1)
-    return -1;
-  else if (!channel_p)
-    execl("/bin/xterm", "xterm", "-e", "channel", nullptr);
+  auto app = Gtk::Application::create("br.unb.tr1.simulador");
 
-  if ((alice_p = fork()) == -1)
-    return -1;
-  else if (!alice_p)
-    execl("/bin/xterm", "xterm", "-e", "peer", "Alice", nullptr);
-
-  if ((bob_p = fork()) == -1)
-    return -1;
-  else if (!bob_p)
-    execl("/bin/xterm", "xterm", "-e", "peer", "Bob", nullptr);
-
-  while (wait(&status) > 0)
-    ;
+  return app->make_window_and_run<Gui::ConfigWindow>(argc, argv);
 }

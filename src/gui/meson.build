@@ -1,5 +1,4 @@
 gui_sources = files(
-    'main.cpp', 
     'simulator.cpp', 
     'config_window.cpp',
     'chat_window.cpp',

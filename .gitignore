@@ -3,3 +3,6 @@
 build
 .vscode
 *.tar*
+peer
+channel
+tr1_sim
