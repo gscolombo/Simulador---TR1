@@ -5,7 +5,6 @@
 #include <csignal>
 #include <cstring>
 #include <fcntl.h>
-#include <filesystem>
 #include <spawn.h>
 #include <stdexcept>
 #include <sys/wait.h>
@@ -24,19 +23,6 @@ void close_fd(int &fd) {
   if (fd >= 0)
     ::close(fd);
   fd = -1;
-}
-
-// Busca pelos executáveis (channel e peer) no mesmo diretório do binário da GUI
-std::string program_path(const std::string &program) {
-  try {
-    auto dir = std::filesystem::read_symlink("/proc/self/exe").parent_path();
-    auto path = dir / program;
-    if (std::filesystem::exists(path))
-      return path.string();
-  } catch (const std::filesystem::filesystem_error &) {
-  }
-
-  return program; // Procura no PATH
 }
 
 std::string describe_status(int status) {
@@ -97,7 +83,8 @@ void Simulator::start(const SimulatorConfig &config) {
     throw;
   }
 
-  // Aguarda por timeout para verificar status de processos-filhos criados
+  // Verificar status de processos-filhos criados a cada POLL_INTERVAL_MS
+  // milissegundos
   active = true;
   tick = Glib::signal_timeout().connect(sigc::mem_fun(*this, &Simulator::reap),
                                         POLL_INTERVAL_MS);
@@ -133,8 +120,6 @@ void Simulator::spawn(size_t index, const std::string &label,
   Child &child = children[index];
   child.label = label;
 
-  // Pontas dos pipes ficam fechadas em execuções futuras (O_CLOEXEC), o que
-  // garante a entrega de EOF quando um processo termina
   int in_pipe[2] = {-1, -1}, out_pipe[2] = {-1, -1}, err_pipe[2] = {-1, -1};
 
   // Função auxiliar para fechar todos os pipes
@@ -145,6 +130,8 @@ void Simulator::spawn(size_t index, const std::string &label,
     }
   };
 
+  // Pontas dos pipes são fechadas após exec (O_CLOEXEC), o que
+  // garante a entrega de EOF quando um processo termina
   if (pipe2(err_pipe, O_CLOEXEC) < 0 ||
       (is_peer &&
        (pipe2(in_pipe, O_CLOEXEC) < 0 || pipe2(out_pipe, O_CLOEXEC) < 0))) {
@@ -152,7 +139,8 @@ void Simulator::spawn(size_t index, const std::string &label,
     throw std::runtime_error("Erro ao criar pipes para " + label + ".");
   }
 
-  // Redireciona a entrada/saída padrão para os respectivos pipes
+  // Redireciona a entrada/saída padrão dos processos filhos para os respectivos
+  // pipes, que são fechados após exec (O_CLOEXEC)
   posix_spawn_file_actions_t actions;
   posix_spawn_file_actions_init(&actions);
 
@@ -161,7 +149,7 @@ void Simulator::spawn(size_t index, const std::string &label,
     posix_spawn_file_actions_adddup2(&actions, in_pipe[0], STDIN_FILENO);
     posix_spawn_file_actions_adddup2(&actions, out_pipe[1], STDOUT_FILENO);
   } else {
-    // Para o canal, stdin é descartado e stdout é escrito no pipe de erro
+    // Para o canal, stdin retorna EOF e stdout é escrito no pipe de erro
     posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null",
                                      O_RDONLY, 0);
     posix_spawn_file_actions_adddup2(&actions, err_pipe[1], STDOUT_FILENO);
@@ -169,17 +157,15 @@ void Simulator::spawn(size_t index, const std::string &label,
   // stderr escreve no pipe de erro tanto para os peers quanto para o canal
   posix_spawn_file_actions_adddup2(&actions, err_pipe[1], STDERR_FILENO);
 
-  // Busca o caminho do binário e inicializa lista de argumentos
-  std::string path = program_path(program);
-  std::vector<char *> argv = {path.data()};
-  std::vector<std::string> arg_copy = args;
-  for (std::string &arg : arg_copy)
+  // Inicializa lista de argumentos
+  std::vector<const char *> argv = {program.data()};
+  for (const std::string &arg : args)
     argv.push_back(arg.data());
   argv.push_back(nullptr);
 
   // Cria (spawna) novo processo (peer ou channel)
-  int err = posix_spawnp(&child.pid, path.c_str(), &actions, nullptr,
-                         argv.data(), environ);
+  int err = posix_spawnp(&child.pid, program.c_str(), &actions, nullptr,
+                         (char *const *)(argv.data()), environ);
   posix_spawn_file_actions_destroy(&actions);
 
   if (err != 0) {
@@ -188,7 +174,7 @@ void Simulator::spawn(size_t index, const std::string &label,
                              "': " + std::strerror(err));
   }
 
-  // Mantém no processo atual (pai) apenas as pontas que ele utiliza
+  // Mantém no processo atual (pai) apenas as pontas dos pipes que ele utiliza
   close_fd(in_pipe[0]);
   close_fd(out_pipe[1]);
   close_fd(err_pipe[1]);
@@ -204,10 +190,6 @@ void Simulator::spawn(size_t index, const std::string &label,
   watch(index);
 }
 
-/*
-  Inicializa handlers de IO para monitorar os pipes
-  sem bloquear o event loop do GTK
-*/
 void Simulator::watch(size_t index) {
   Child &child = children[index];
   auto condition = Glib::IOCondition::IO_IN | Glib::IOCondition::IO_HUP;
@@ -222,9 +204,6 @@ void Simulator::watch(size_t index) {
       child.stderr_fd, condition);
 }
 
-/*
-  Finaliza um processo-filho
-*/
 void Simulator::terminate(Child &child) {
   child.out_watch.disconnect();
   child.err_watch.disconnect();
@@ -254,9 +233,6 @@ void Simulator::terminate(Child &child) {
   child.log_tail.clear();
 }
 
-/*
-  Callback para leitura de saída de pipe
-*/
 bool Simulator::on_readable(size_t index, bool is_stderr) {
   Child &child = children[index];
   int &fd = is_stderr ? child.stderr_fd : child.stdout_fd;
@@ -280,9 +256,6 @@ bool Simulator::on_readable(size_t index, bool is_stderr) {
   return true;
 }
 
-/*
-  Repassa mensagem recebida pelo peer para o processo principal (config window)
-*/
 void Simulator::on_stdout_data(size_t index, const char *data, size_t size) {
   Child &child = children[index];
   child.out_buffer.append(data, size);
@@ -305,7 +278,6 @@ void Simulator::on_stdout_data(size_t index, const char *data, size_t size) {
   }
 }
 
-// Lê o que restou nos pipes de um processo que já terminou
 void Simulator::drain(size_t index) {
   Child &child = children[index];
   char buf[4096];
@@ -323,10 +295,6 @@ void Simulator::drain(size_t index) {
   }
 }
 
-/*
-  Verifica se todos os processos (peers e channel)
-  estão em execução. Caso contrário, para a simulação
-*/
 bool Simulator::reap() {
   if (!active)
     return false;
@@ -350,6 +318,7 @@ bool Simulator::reap() {
     if (!active) // Algum handler interrompeu o simulador
       return false;
 
+    // Verifica se processo encerrou com erro
     if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
       std::string reason = child.label + " " + describe_status(status);
       if (!child.log_tail.empty())
@@ -359,10 +328,12 @@ bool Simulator::reap() {
       return false;
     }
 
+    // Desabilita chat se o processo terminado é um dos peers
     if (i != CHANNEL)
       signal_peer_exited.emit(PeerId(i - 1));
   }
 
+  // Para o simulador se todos os processos filhos terminaram
   if (all_exited) {
     stop();
     signal_finished.emit();

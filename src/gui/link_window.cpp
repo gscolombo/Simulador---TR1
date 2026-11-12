@@ -1,7 +1,5 @@
 #include "gui/link_window.hpp"
 
-#include <algorithm>
-
 using namespace Gui;
 
 LinkWindow::LinkWindow(const std::array<std::string, 2> &names) : names(names) {

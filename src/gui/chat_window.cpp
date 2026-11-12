@@ -68,7 +68,6 @@ void ChatWindow::on_send() {
 }
 
 void ChatWindow::show_received(const std::string &text) {
-  // Avisos de entrada/saída do outro peer são mensagens do próprio protocolo
   if (text == remote_name + " entrou" || text == remote_name + " saiu")
     show_system(text);
   else

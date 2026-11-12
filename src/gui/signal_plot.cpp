@@ -37,8 +37,7 @@ SignalPlot::SignalPlot() {
 
   // Somente movimento horizontal
   auto motion = Gtk::EventControllerMotion::create();
-  motion->signal_motion().connect(
-      [this](double x, double) { pointer_x = x; });
+  motion->signal_motion().connect([this](double x, double) { pointer_x = x; });
   add_controller(motion);
 
   auto drag = Gtk::GestureDrag::create();
@@ -104,7 +103,10 @@ bool SignalPlot::on_scroll(double, double dy) {
   const double fraction = std::clamp((pointer_x - LEFT) / plot_width(), 0., 1.);
   const double anchor = first + fraction * count; // Amostra sob o ponteiro
 
+  // Reduz (dy < 0) ou aumenta (dy > 0) o número de amostras visíveis
   const double new_count = count * (dy < 0 ? 0.8 : 1.25);
+
+  // Aplica zoom sobre a amostra sob o ponteiro
   apply_view(anchor - fraction * new_count, new_count, true);
   return true;
 }
@@ -156,15 +158,16 @@ void SignalPlot::on_draw(const Cairo::RefPtr<Cairo::Context> &cr, int width,
     for (size_t x = 0; x < lo.size(); x++) {
       size_t i0 = (size_t)(first + x * per_pixel);
       size_t i1 = std::min(n, (size_t)(first + (x + 1) * per_pixel) + 1);
-      auto [mn, mx] = std::minmax_element(samples->begin() + i0,
-                                          samples->begin() + std::max(i0 + 1, i1));
+      auto [mn, mx] = std::minmax_element(
+          samples->begin() + i0, samples->begin() + std::max(i0 + 1, i1));
       lo[x] = *mn;
       hi[x] = *mx;
       ymin = std::min(ymin, *mn);
       ymax = std::max(ymax, *mx);
     }
   } else {
-    size_t i0 = (size_t)first, i1 = std::min(n, (size_t)std::ceil(first + count) + 1);
+    size_t i0 = (size_t)first,
+           i1 = std::min(n, (size_t)std::ceil(first + count) + 1);
     for (size_t i = i0; i < i1; i++) {
       ymin = std::min(ymin, (*samples)[i]);
       ymax = std::max(ymax, (*samples)[i]);
@@ -179,7 +182,9 @@ void SignalPlot::on_draw(const Cairo::RefPtr<Cairo::Context> &cr, int width,
   ymin -= margin;
   ymax += margin;
 
-  auto y_of = [&](double v) { return TOP + ph * (1. - (v - ymin) / (ymax - ymin)); };
+  auto y_of = [&](double v) {
+    return TOP + ph * (1. - (v - ymin) / (ymax - ymin));
+  };
 
   // Grade e rótulos dos eixos
   const bool use_seconds = count / sample_rate >= 1.;
@@ -200,8 +205,9 @@ void SignalPlot::on_draw(const Cairo::RefPtr<Cairo::Context> &cr, int width,
         format_time((first + fraction * count) / sample_rate, use_seconds);
     Cairo::TextExtents extents;
     cr->get_text_extents(time, extents);
-    cr->move_to(std::clamp(gx - extents.width / 2, 0., (double)width - extents.width),
-                height - 6);
+    cr->move_to(
+        std::clamp(gx - extents.width / 2, 0., (double)width - extents.width),
+        height - 6);
     cr->show_text(time);
 
     // Evita rótulos como "5e-15 V" no zero (erro de arredondamento)
@@ -235,7 +241,7 @@ void SignalPlot::on_draw(const Cairo::RefPtr<Cairo::Context> &cr, int width,
     cr->unset_dash();
   }
 
-  // Forma de onda
+  // Desenha a forma de onda
   cr->set_source_rgb(0.1, 0.3, 0.8);
   if (per_pixel > 1.) {
     for (size_t x = 0; x < lo.size(); x++) {
@@ -243,13 +249,13 @@ void SignalPlot::on_draw(const Cairo::RefPtr<Cairo::Context> &cr, int width,
       cr->line_to(LEFT + x + 0.5, y_of(hi[x]) - 0.5);
     }
   } else {
-    const size_t i0 = (size_t)first, i1 = std::min(n, (size_t)std::ceil(first + count) + 1);
-    for (size_t i = i0; i < i1; i++) {
-      const double px = LEFT + ((double)i - first) * pw / count;
-      if (i == i0)
-        cr->move_to(px, y_of((*samples)[i]));
-      else
-        cr->line_to(px, y_of((*samples)[i]));
+    const size_t i0 = (size_t)first,
+                 i1 = std::min(n, (size_t)std::ceil(first + count) + 1);
+    double px = LEFT + ((double)i0 - first) * pw / count;
+    cr->move_to(px, y_of((*samples)[i0]));
+    for (size_t i = i0 + 1; i < i1; i++) {
+      px = LEFT + ((double)i - first) * pw / count;
+      cr->line_to(px, y_of((*samples)[i]));
     }
   }
   cr->stroke();

@@ -13,26 +13,37 @@ public:
   // incluindo o delimitador \0)
   static constexpr size_t MAX_MESSAGE_BYTES = 254;
 
+  // Constrói a janela de chat de um peer
   ChatWindow(const std::string &own_name, const std::string &remote_name);
 
   // Texto digitado pelo usuário para transmissão
   sigc::signal<void(const std::string &)> signal_send;
 
+  // Insere mensagens recebidas pelo outro peer no chat
   void show_received(const std::string &text);
+
+  // Insere mensagens do sistema no chat
   void show_system(const std::string &text);
+
+  // Ativa/desativa o envio de mensagens no chat
   void set_enabled(bool enabled);
 
+  const std::string get_peer_name() { return name; };
+
 private:
+  // Callback para envio de mensagem em resposta a sinal (clique ou Enter)
   void on_send();
+  // Insere um texto no chat
   void append(const std::string &line);
 
-  std::string remote_name;
+  std::string name;        // Nome do peer remetente
+  std::string remote_name; // Nome do peer destinatário
 
   Gtk::Box root{Gtk::Orientation::VERTICAL, 6};
   Gtk::ScrolledWindow scroller;
-  Gtk::TextView history;
+  Gtk::TextView history; // Histórico de mensagens do chat
   Gtk::Box input_row{Gtk::Orientation::HORIZONTAL, 6};
-  Gtk::Entry entry;
+  Gtk::Entry entry; // Campo para entrada de texto
   Gtk::Button send_button{"Enviar"};
 };
 

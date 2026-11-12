@@ -89,6 +89,8 @@ ConfigWindow::ConfigWindow() {
   root.append(status_label);
   set_child(root);
 
+  /* Registro de callbacks */
+
   // Reavalia o formulário a cada alteração
   modulation.property_selected().signal_changed().connect(
       sigc::mem_fun(*this, &ConfigWindow::update_form));
@@ -189,7 +191,6 @@ SimulatorConfig ConfigWindow::read_config() const {
   return config;
 }
 
-// Retorna a descrição do primeiro problema encontrado (vazio se válido)
 std::string ConfigWindow::check(const SimulatorConfig &config) const {
   if (config.names[0].empty() || config.names[1].empty())
     return "Informe o nome dos dois peers.";
@@ -210,6 +211,10 @@ void ConfigWindow::update_form() {
   std::string error = check(config);
   if (error.empty()) {
     char text[128];
+    /**
+        Calcula e apresenta o baud do sinal e a taxa de amostragem
+        com base nas configurações inseridas.
+     */
     std::snprintf(text, sizeof(text),
                   "Baud: %.6g Bd — taxa de amostragem: %.6g Hz",
                   config.modem.baud(),
@@ -217,10 +222,15 @@ void ConfigWindow::update_form() {
     summary_label.set_text(text);
     summary_label.remove_css_class("error");
   } else {
+    // Apresenta mensagem de erro
     summary_label.set_text(error);
     summary_label.add_css_class("error");
   }
 
+  /**
+     O início do simulador é desabilitado se alguma configuração inválida é
+     identificada
+  */
   start_button.set_sensitive(error.empty());
 }
 
@@ -349,13 +359,6 @@ void ConfigWindow::show_signals() {
 void ConfigWindow::show_link() {
   if (link_view)
     link_view->present();
-}
-
-void ConfigWindow::set_status(const std::string &text) {
-  // Mensagens de erro podem conter saída de processos em bytes arbitrários
-  gchar *valid = g_utf8_make_valid(text.c_str(), text.size());
-  status_label.set_text(valid);
-  g_free(valid);
 }
 
 void ConfigWindow::set_running(bool running) {
