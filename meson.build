@@ -8,43 +8,34 @@ subdir('src')
 subdir('src/gui')
 subdir('tests')
 
-executable(
-  'sim',
-  'main.cpp',
-  sources,
-  install : true,
-  include_directories : include_dir
-)
-
-executable(
-  'channel',
-  'channel.cpp',
-  sources,
-  install : true,
-  include_directories : include_dir
-)
-
-executable(
-  'peer',
-  'peer.cpp',
-  sources,
-  install : true,
-  include_directories : include_dir
-)
-
-# Interface gráfica (opcional): fica no mesmo diretório de `channel` e `peer`,
-# pois é onde ela procura os executáveis que cria
 gtkmm_dep = dependency('gtkmm-4.0', required : true)
 
 if gtkmm_dep.found()
   executable(
-    'gui',
-    gui_sources,
+    'sim',
+    'main.cpp',
     sources,
+    gui_sources,
     dependencies : gtkmm_dep,
     install : true,
     include_directories : [include_dir, include_directories('include/gui')]
   )
+
+  executable(
+    'channel',
+    'channel.cpp',
+    sources,
+    install : true,
+    include_directories : include_dir
+  )
+
+  executable(
+    'peer',
+    'peer.cpp',
+    sources,
+    install : true,
+    include_directories : include_dir
+  )
 else
-  message('gtkmm-4.0 não encontrado: a interface gráfica não será compilada')
+  message('gtkmm-4.0 não encontrado')
 endif
