@@ -77,9 +77,6 @@ void Modem::toVolts(const bytes &data, bytes &volts) {
 }
 
 void Modem::fromVolts(const bytes &volts, bytes &data) {
-  // volts deve ser um vetor de bytes representando um sinal elétrico
-  assert(volts.size() % sizeof(double) == 0);
-
   signal_sample sample;
   symbol s;
 
