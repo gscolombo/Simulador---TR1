@@ -82,7 +82,7 @@ void Channel::open() {
   // Prepara canal para receber conexões
   check_err(bind(channel_sock, (struct sockaddr *)&channel, sizeof(channel)),
             errMessage);
-  check_err(listen(channel_sock, 1), errMessage);
+  check_err(listen(channel_sock, 2), errMessage);
 
   // Seta o descritor do socket do canal
   fds[0].fd = channel_sock;
@@ -100,6 +100,7 @@ void Channel::open() {
 
 void Channel::stream() {
   bytes signal(BUF_SIZE);
+  int total = 0;
 
   try {
     while (true) {
@@ -124,7 +125,12 @@ void Channel::stream() {
               continue;
             }
 
-            signal.resize(n);
+            // Verifica se ao menos um `double` foi recebido
+            total += n;
+            if (total % sizeof(double) != 0)
+              continue;
+
+            signal.resize(total);
             trace(TRACE_IN, i, signal); // Registro de sinal sem ruído
 
             // Determina qual o destinatário dos dados
