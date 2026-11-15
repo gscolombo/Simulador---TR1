@@ -1,8 +1,7 @@
 /**
  * @file channel.hpp
  * @brief Definição da classe Channel.
- * @details Este arquivo contém a definição da classe Channel, que representa o
- * canal de comunicação entre os tranceptores.
+ * @details Este arquivo contém a definição da classe Channel, que representa o canal de comunicação entre os tranceptores.
  */
 #ifndef CHANNEL_H
 #define CHANNEL_H
@@ -21,16 +20,16 @@ namespace PhysicalLayer {
 /**
  * @brief Canal físico bidirecional entre dois transceptores.
  * @details
- * O canal representa o meio de comunicação por meio de amostras de sinais
- * elétricos de tensão. O modem produz cada amostra como um `double` em volts, e
- * este objeto apenas transporta a representação binária dessas amostras entre
- * os dois transceptores conectados por sockets Unix locais.
+ * O canal representa o meio de comunicação por meio de amostras de sinais elétricos de
+ * tensão. O modem produz cada amostra como um `double` em volts, e este objeto
+ * apenas transporta a representação binária dessas amostras entre os dois
+ * transceptores conectados por sockets Unix locais.
  *
  * Antes de encaminhar cada bloco ao destinatário, o canal pode inserir ruído
  * branco gaussiano aditivo (AWGN) diretamente nas amostras de tensão. Para
  * cada amostra `v`, é aplicado `v' = v + n`, em que
  * `n ~ N(noise_mu, noise_sigma^2)`. Assim, `noise_mu` controla a média do
- * ruído (componente DC) e `noise_sigma` controla seu desvio padrão.
+ * ruído (componente DC) e `noise_sigma` controla seu desvio padrão. 
  * Quando `noise_sigma` é zero, o sinal é encaminhado sem adição de ruído.
  *
  * A implementação usa sockets apenas como mecanismo de comunicação entre as
@@ -58,10 +57,10 @@ public:
   void open();
   /**
    * @brief Encaminha sinais entre os transceptores.
-   * @details Aguarda dados em qualquer conexão, acumula bytes até obter pelo
-   * menos uma amostra (`double`) de sinal de tensão, adiciona o AWGN
-   * configurado e encaminha o sinal resultante ao outro transceptor. Retorna
-   * quando as duas conexões são encerradas.
+   * @details Aguarda dados em qualquer conexão, interpreta o bloco recebido
+   * como amostras `double` de tensão, adiciona o AWGN configurado e envia o
+   * bloco ao outro transceptor. Retorna quando as duas conexões são
+   * encerradas.
    */
   void stream();
   /**
@@ -80,23 +79,18 @@ private:
   /** Descritor do socket de escuta do canal. */
   int channel_sock;
   /**
-   * @brief Estruturas de descritores de socket gerenciados pelo canal com
-   * suporte para polling
-   * @details Cada estrutura contém o descritor do arquivo, os eventos
-   * monitorados e os eventos retornados. No caso, somente o evento POLLIN
-   * (quando dados estão disponíveis para leitura) é monitorado.
+   * @brief Estrutura de socket do canal.
+   * @details Esta estrutura representa o socket do canal de comunicação.
    */
   struct pollfd fds[3] = {INIT_POLLFD, INIT_POLLFD, INIT_POLLFD};
   /**
    * @brief Média do ruído gaussiano.
-   * @details Esta variável armazena a média do ruído gaussiano a ser adicionado
-   * ao sinal.
+   * @details Esta variável armazena a média do ruído gaussiano a ser adicionado ao sinal.
    */
   double noise_mu;
   /**
    * @brief Desvio padrão do ruído gaussiano.
-   * @details Esta variável armazena o desvio padrão do ruído gaussiano a ser
-   * adicionado ao sinal.
+   * @details Esta variável armazena o desvio padrão do ruído gaussiano a ser adicionado ao sinal.
    */
   double noise_sigma;
   /** Gerador pseudoaleatório usado para produzir o ruído. */
@@ -118,17 +112,14 @@ private:
    */
   void add_noise(bytes &signal);
   /**
-   * @brief Registra uma amostra do sinal elétrico recebido/transmitido pelo
-   * canal.
-   * @details O arquivo para visualização do sinal é formado com registros de
-   * amostras com um cabeçalho contendo o PID do processo remetente, o tamanho
-   * da amostra em bytes, o tempo em que foi processada e o estado do sinal
-   * (antes ou após adição de ruído).
-   * @param stage Estágio do sinal durante passagem pelo canal (antes ou após
-   * adição de ruído)
+   * @brief Registra uma amostra do sinal elétrico recebido/transmitido pelo canal.
+   * @details O arquivo para visualização do sinal é formado com registros de amostras
+   * com um cabeçalho contendo o PID do processo remetente, o tamanho da amostra em bytes, o
+   * tempo em que foi processada e o estado do sinal (antes ou após adição de ruído).
+   * @param stage Estágio do sinal durante passagem pelo canal (antes ou após adição de ruído)
    * @param sender PID do processo remetente
    * @param signal Amostra de sinal elétrico em bytes
-   */
+  */
   void trace(TraceStage stage, int sender, const bytes &signal);
 };
 

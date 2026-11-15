@@ -99,8 +99,8 @@ void Channel::open() {
 }
 
 void Channel::stream() {
-  bytes signal(BUF_SIZE);
-  int total = 0;
+  bytes chunk(BUF_SIZE);
+  bytes pending[3];
 
   try {
     while (true) {
@@ -116,7 +116,7 @@ void Channel::stream() {
         for (int i : {1, 2}) {
           // Verifica se o i-ésimo transceptor enviou dados
           if (fds[i].fd > 0 && (fds[i].revents & POLLIN)) {
-            int n = recv(fds[i].fd, signal.data(), BUF_SIZE, 0);
+            int n = recv(fds[i].fd, chunk.data(), BUF_SIZE, 0);
             check_err(n, "Erro durante recebimento de dados no canal.");
 
             // Transmissor fechou a conexão
@@ -125,13 +125,16 @@ void Channel::stream() {
               continue;
             }
 
-            // Verifica se ao menos um `double` foi recebido
-            total += n;
-            if (total % sizeof(double) != 0)
+            pending[i].insert(pending[i].end(), chunk.begin(), chunk.begin() + n);
+
+            size_t ready = (pending[i].size() / sizeof(double)) * sizeof(double);
+            if (ready == 0)
               continue;
 
-            signal.resize(total);
-            trace(TRACE_IN, i, signal); // Registro de sinal sem ruído
+            bytes signal(pending[i].begin(), pending[i].begin() + ready);
+            pending[i].erase(pending[i].begin(), pending[i].begin() + ready);
+
+            trace(TRACE_IN, i, signal);
 
             // Determina qual o destinatário dos dados
             int recipient = i == 1 ? fds[2].fd : fds[1].fd;
@@ -148,11 +151,9 @@ void Channel::stream() {
 
             // Retransmite dados ao receptor
             _send(recipient, signal);
-
-            signal.resize(BUF_SIZE);
           }
         }
-    }
+    } // <-- Faltava esta chave para fechar o while (true)
   } catch (const std::runtime_error &e) {
     std::cout << e.what() << std::endl;
   }

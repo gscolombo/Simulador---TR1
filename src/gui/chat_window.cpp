@@ -55,6 +55,13 @@ void ChatWindow::on_send() {
   if (text.empty())
     return;
 
+  if (text.size() > MAX_MESSAGE_BYTES) {
+    show_system("Mensagem muito longa (" + std::to_string(text.size()) +
+                " bytes; máximo de " + std::to_string(MAX_MESSAGE_BYTES) +
+                ").");
+    return;
+  }
+
   append("Você: " + text);
   signal_send.emit(text);
   entry.set_text("");
