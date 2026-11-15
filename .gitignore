@@ -6,3 +6,5 @@ build
 peer
 channel
 tr1_sim
+*.sh
+*.zip

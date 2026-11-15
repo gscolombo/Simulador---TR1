@@ -110,7 +110,7 @@ void Modem::fromVolts(const bytes &volts, bytes &data) {
 
     // ...demodula o conjunto de doubles no símbolo correspondente...
     s.clear();
-    estimate_df_offset(sample); // Estima a componente DC do sinal
+    estimate_dc_offset(sample); // Estima a componente DC do sinal
     demodulate(sample, s);
     assert(s.size() == symbol_size);
 
@@ -175,7 +175,7 @@ double Modem::signal_correlation(const signal_sample &g,
          sqrt(Ex / Eg); // <g(t),x(t)>/sqrt(||g(t)|| * ||x(t)||)
 }
 
-void Modem::estimate_df_offset(const signal_sample &sample) {
+void Modem::estimate_dc_offset(const signal_sample &sample) {
   double m = 0;
   for (double s : sample)
     m += s;

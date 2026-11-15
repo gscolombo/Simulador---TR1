@@ -36,7 +36,7 @@ public:
    */
   Modem(size_t symbol_size, size_t sample_size, double bitrate, double A);
   /** Destrutor virtual da interface de modem. */
-  ~Modem() = default;
+  virtual ~Modem() = default;
 
   /** Cria uma cópia polimórfica do modem. */
   virtual std::shared_ptr<Modem> clone() const = 0;
@@ -70,7 +70,7 @@ protected:
   double signal_correlation(const signal_sample &g,
                             const signal_sample &x) const;
   /** Estima e atualiza o deslocamento DC observado no sinal recebido. */
-  void estimate_df_offset(const signal_sample &sample);
+  void estimate_dc_offset(const signal_sample &sample);
 
   /** Converte um símbolo de bits em amostras elétricas. */
   virtual void modulate(symbol &s, signal_sample &sample) const = 0;

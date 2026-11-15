@@ -24,14 +24,10 @@ int main(int argc, char **argv) {
     Channel channel(mu, sigma);
     if (argc == 4)
       channel.set_trace_file(argv[3]);
-    std::cout << "Canal iniciado" << std::endl;
 
     channel.open();
-    std::cout << "Pares conectados" << std::endl;
-
     channel.stream();
     channel.close();
-    std::cout << "Canal fechado" << std::endl;
 
   } catch (const std::exception &e) {
     std::cerr << e.what() << " (" << strerror(errno) << ")" << std::endl;
