@@ -9,10 +9,6 @@ namespace Gui {
 // Janela de chat de um peer
 class ChatWindow : public Gtk::Window {
 public:
-  // Limite de bytes por mensagem (o peer descarta payloads maiores que 255 B,
-  // incluindo o delimitador \0)
-  static constexpr size_t MAX_MESSAGE_BYTES = 254;
-
   // Constrói a janela de chat de um peer
   ChatWindow(const std::string &own_name, const std::string &remote_name);
 
