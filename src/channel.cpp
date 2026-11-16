@@ -126,8 +126,10 @@ void Channel::stream() {
             }
 
             // Verifica se ao menos um `double` foi recebido
-            pending[i].insert(pending[i].end(), chunk.begin(), chunk.begin() + n);
-            size_t ready = (pending[i].size() / sizeof(double)) * sizeof(double);
+            pending[i].insert(pending[i].end(), chunk.begin(),
+                              chunk.begin() + n);
+            size_t ready =
+                (pending[i].size() / sizeof(double)) * sizeof(double);
             if (ready == 0)
               continue;
 
@@ -175,6 +177,8 @@ void Channel::close() {
 }
 
 void Channel::trace(TraceStage stage, int sender, const bytes &signal) {
+  assert(signal.size() % sizeof(double) == 0);
+
   if (trace_fd < 0)
     return;
 

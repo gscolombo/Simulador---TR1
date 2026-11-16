@@ -24,7 +24,7 @@ enum TraceStage : uint8_t {
 */
 struct TraceHeader {
   uint32_t source_pid; // Processo transmissor do sinal
-  uint32_t size;       // Bytes de amostras que seguem o cabeçalho
+  uint32_t size;       // Bytes de amostras que seguem o cabeçalho. Sempre múltiplo de `sizeof(double)`
   uint64_t time_ns;    // Instante do registro (relógio monotônico)
   TraceStage stage;    // TraceStage
   uint8_t reserved[7];

@@ -55,22 +55,14 @@ void TraceReader::process(const TraceHeader &header, const std::byte *payload) {
   SignalData &data = signals[{header.source_pid, header.stage}];
 
   // Pausa longa: nova transmissão
-  if (data.last_time_ns &&
-      header.time_ns - data.last_time_ns > BURST_GAP_NS) {
+  if (data.last_time_ns && header.time_ns - data.last_time_ns > BURST_GAP_NS)
     data.samples.clear();
-    data.pending.clear();
-  }
+
   data.last_time_ns = header.time_ns;
 
-  // O limite de um bloco pode cair no meio de uma amostra (8 bytes)
-  data.pending.insert(data.pending.end(), payload, payload + header.size);
-
-  const size_t count = data.pending.size() / sizeof(double);
+  const size_t count = header.size / sizeof(double);
   const size_t old_size = data.samples.size();
 
   data.samples.resize(old_size + count);
-  std::memcpy(data.samples.data() + old_size, data.pending.data(),
-              count * sizeof(double));
-  data.pending.erase(data.pending.begin(),
-                     data.pending.begin() + count * sizeof(double));
+  std::memcpy(data.samples.data() + old_size, payload, header.size);
 }
