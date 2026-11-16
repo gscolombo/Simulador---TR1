@@ -76,6 +76,7 @@ void rx(Transceiver *trx, LL::LinkLayer *link) {
       link->push(chunk, [trx](const DecodeResult &result) {
         if (!result.accepted) {
           emit_trace("erro-rx", result.error);
+          trx->reset_modem();
           return;
         }
 
