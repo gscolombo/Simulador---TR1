@@ -282,9 +282,9 @@ void BipolarModem::demodulate(signal_sample &sample, symbol &s) const {
     m += s;
   m /= sample.size();
 
-  // Compara a tensão média com os limiares de decisão (-0.5V e 0.5V)
-  // Entre -0.5V e 0.5V => 0; caso contrário, 1
-  s.push_back((fabs(m - dc_offset)) > 0.5 ? 1 : 0);
+  // Compara a tensão média com os limiares de decisão (-A/2V e A/2V)
+  // Entre -A/2V e A/2V => 0; caso contrário, 1
+  s.push_back((fabs(m - dc_offset)) > 0.5 * A ? 1 : 0);
 }
 
 /* =================== */
