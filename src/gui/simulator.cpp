@@ -5,6 +5,7 @@
 #include <csignal>
 #include <cstring>
 #include <fcntl.h>
+#include <filesystem>
 #include <spawn.h>
 #include <stdexcept>
 #include <sys/wait.h>
@@ -130,6 +131,15 @@ void Simulator::spawn(size_t index, const std::string &label,
     }
   };
 
+  // Procura pelo caminho do executável do programa
+  using namespace std::filesystem;
+
+  path parent = absolute(read_symlink("/proc/self/exe").parent_path());
+  path bin = parent.append(program);
+
+  if (!exists(bin))
+    throw std::runtime_error("Programa \"" + program + "\" não encontrado.");
+
   // Pontas dos pipes são fechadas após exec (O_CLOEXEC), o que
   // garante a entrega de EOF quando um processo termina
   if (pipe2(err_pipe, O_CLOEXEC) < 0 ||
@@ -164,7 +174,7 @@ void Simulator::spawn(size_t index, const std::string &label,
   argv.push_back(nullptr);
 
   // Cria (spawna) novo processo (peer ou channel)
-  int err = posix_spawnp(&child.pid, program.c_str(), &actions, nullptr,
+  int err = posix_spawnp(&child.pid, bin.c_str(), &actions, nullptr,
                          (char *const *)(argv.data()), environ);
   posix_spawn_file_actions_destroy(&actions);
 
