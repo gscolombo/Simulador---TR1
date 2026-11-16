@@ -426,7 +426,7 @@ DecodeResult LinkLayer::decode(const bytes &frame) {
   DecodeResult result;
   try {
     bytes checked = remove_framing(frame);
-    report("quadro-rx", checked);
+    report("enlace-rx", checked);
 
     // Remove Hamming se configurado, caso contrário valida o EDC tradicional
     result = config.check == CheckType::Hamming ? remove_hamming(checked) : remove_check(checked);
@@ -448,44 +448,65 @@ DecodeResult LinkLayer::decode(const bytes &frame) {
  * @brief Processa o fluxo contínuo de dados recebidos em pedaços (streaming / chunks),
  * identificando os limites dos quadros e acionando o callback quando um quadro estiver completo.
  */
-void LinkLayer::push(const bytes &chunk, const std::function<void(const DecodeResult &)> &callback) {
+void LinkLayer::push(
+    const bytes &chunk,
+    const std::function<void(const DecodeResult &)> &callback) {
+
+  auto report_frame = [*this](const std::byte value) {
+    bytes frame;
+    frame.push_back(value);
+    frame.insert(frame.begin() + 1, this->stream.begin(), this->stream.end());
+    frame.push_back(value);
+    report("quadro-rx", frame);
+  };
+
   // Tratamento para protocolos baseados em Flags (Byte Stuffing e Bit Stuffing)
-  if (config.framing == FramingType::ByteStuffing || config.framing == FramingType::BitStuffing) {
+  if (config.framing == FramingType::ByteStuffing ||
+      config.framing == FramingType::BitStuffing) {
     for (std::byte value : chunk) {
       uint8_t byte = std::to_integer<uint8_t>(value);
       if (config.framing == FramingType::ByteStuffing) {
         if (byte == FLAG) {
-          if (!stream.empty()) callback(decode(stream));
+          if (!stream.empty()) {
+            report_frame(value);
+            callback(decode(stream));
+          }
           stream.clear();
           escaping = false;
         } else if (escaping) {
           stream.push_back(std::byte{static_cast<uint8_t>(byte ^ ESC_MASK)});
           escaping = false;
-        } else if (byte == ESC) escaping = true;
-        else stream.push_back(value);
+        } else if (byte == ESC)
+          escaping = true;
+        else
+          stream.push_back(value);
       } else {
         if (byte == FLAG) {
-          if (!stream.empty()) callback(decode(stream));
+          if (!stream.empty()) {
+            report_frame(value);
+            callback(decode(stream));
+          }
           stream.clear();
-        } else stream.push_back(value);
+        } else
+          stream.push_back(value);
       }
     }
     return;
   }
 
-  // Tratamento para protocolos baseados em Contagem de Caracteres e Entrelaçamento
+  // Tratamento para protocolos baseados em Contagem de Caracteres e
+  // Entrelaçamento
   stream.insert(stream.end(), chunk.begin(), chunk.end());
   if ((config.framing == FramingType::CharacterCount ||
-       config.framing == FramingType::BitInterleaving) && stream.size() >= 2) {
-    size_t size = (std::to_integer<uint8_t>(stream[0]) << 8) | std::to_integer<uint8_t>(stream[1]);
+       config.framing == FramingType::BitInterleaving) &&
+      stream.size() >= 2) {
+    size_t size = (std::to_integer<uint8_t>(stream[0]) << 8) |
+                  std::to_integer<uint8_t>(stream[1]);
     if (stream.size() >= size + 2) {
       bytes frame(stream.begin(), stream.begin() + size + 2);
       stream.erase(stream.begin(), stream.begin() + size + 2);
       callback(decode(frame));
     }
-  } else if (config.framing == FramingType::BitInterleaving && !stream.empty()) {
-    callback(decode(stream));
-    stream.clear();
   }
 }
 
