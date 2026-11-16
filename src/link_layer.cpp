@@ -96,7 +96,8 @@ bytes stuff_bytes(const bytes &data) {
  */
 bytes stuff_bits(const bytes &data) {
   bytes result{std::byte{FLAG}}; // Inicia com a Flag de abertura
-  int ones = 0;
+  int ones = 0, bits = 0;
+  uint16_t current = 0;
   for (std::byte value : data) {
     uint8_t byte = std::to_integer<uint8_t>(value);
     for (int i = 7; i >= 0; --i) {
@@ -105,16 +106,29 @@ bytes stuff_bits(const bytes &data) {
         ++ones;
       else
         ones = 0;
-      
-      result.push_back(std::byte{static_cast<uint8_t>(one)});
-      
+
+      bits++;
+
+      current = (current << 1u) | one;
+
       // Regra dos 5 uns: injeta um '0' artificialmente
       if (ones == 5) {
-        result.push_back(std::byte{0});
+        bits++;
+        current <<= 1u;
+        current |= 0;
         ones = 0;
+      }
+
+      if (bits >= 8) {
+        result.push_back(
+            std::byte{static_cast<uint8_t>((current >> (bits - 8)) & 0x00FF)});
+        bits -= 8;
       }
     }
   }
+  if (bits > 0)
+    result.push_back(
+        std::byte{static_cast<uint8_t>((current << (8 - bits)) & (0x00FF))});
   result.push_back(std::byte{FLAG}); // Finaliza com a Flag de fechamento
   return result;
 }
@@ -128,23 +142,29 @@ bytes unstuff_bits(const bytes &data) {
   uint8_t current = 0;
   int count = 0;
   for (std::byte value : data) {
-    bool one = std::to_integer<uint8_t>(value) != 0;
-    // Se encontrou 5 uns seguidos seguidos de um '0', remove o '0' (ignora)
-    if (ones == 5 && !one) {
-      ones = 0;
-      continue;
-    }
-    ones = one ? ones + 1 : 0;
-    current = static_cast<uint8_t>((current << 1) | one);
-    // Agrupa 8 bits recuperados para formar 1 byte completo
-    if (++count == 8) {
-      result.push_back(std::byte{current});
-      current = 0;
-      count = 0;
+    uint8_t byte = std::to_integer<uint8_t>(value);
+
+    for (int i = 7; i >= 0; i--) {
+      bool one = (byte >> i) & 1u;
+      if (one)
+        ones++;
+      else {
+        // Se encontrou 5 uns seguidos seguidos de um '0', remove o '0' (ignora)
+        bool stuff = ones == 5;
+        ones = 0;
+        if (stuff)
+          continue;
+      }
+
+      current = (current << 1u) | one;
+
+      // Agrupa 8 bits recuperados para formar 1 byte completo
+      if (++count == 8) {
+        result.push_back(std::byte{current});
+        count = 0;
+      }
     }
   }
-  if (count != 0)
-    throw std::invalid_argument("quadro com quantidade de bits invalida");
   return result;
 }
 
@@ -279,7 +299,7 @@ bytes LinkLayer::apply_hamming(const bytes &data) const {
     // Posiciona os bits de dados nas posições que não são potências de 2 (3, 5, 6, 7, 9, 10, 11, 12)
     for (int position : {3, 5, 6, 7, 9, 10, 11, 12})
       code[position] = input & 1u, input >>= 1;
-    
+
     // Calcula os bits de paridade nas posições 1, 2, 4 e 8
     for (int parity : {1, 2, 4, 8}) {
       uint8_t value_parity = 0;
@@ -290,7 +310,7 @@ bytes LinkLayer::apply_hamming(const bytes &data) const {
     // Empacota os 12 bits em uma palavra de 16 bits
     uint16_t packed = 0;
     for (int position = 1; position <= 12; ++position) packed |= code[position] << (position - 1);
-    
+
     // Divide os 16 bits em 2 bytes e armazena no resultado
     result.push_back(std::byte{static_cast<uint8_t>(packed)});
     result.push_back(std::byte{static_cast<uint8_t>(packed >> 8)});
@@ -313,7 +333,7 @@ DecodeResult LinkLayer::remove_hamming(const bytes &data) const {
                       (std::to_integer<uint8_t>(data[i + 1]) << 8);
     std::array<uint8_t, 13> code{};
     for (int position = 1; position <= 12; ++position) code[position] = (packed >> (position - 1)) & 1u;
-    
+
     // Calcula a síndrome para detectar falhas
     int syndrome = 0;
     for (int parity : {1, 2, 4, 8}) {
@@ -368,7 +388,7 @@ bytes LinkLayer::remove_framing(const bytes &data) const {
   switch (config.framing) {
   case FramingType::CharacterCount:
     if (data.size() < 2 || (static_cast<size_t>(std::to_integer<uint8_t>(data[0])) << 8 |
-                            std::to_integer<uint8_t>(data[1])) != data.size() - 2)
+         std::to_integer<uint8_t>(data[1])) != data.size() - 2)
       throw std::invalid_argument("contagem de caracteres invalida");
     return bytes(data.begin() + 2, data.end());
   case FramingType::BitInterleaving:
@@ -389,11 +409,11 @@ bytes LinkLayer::remove_framing(const bytes &data) const {
 bytes LinkLayer::encode(const bytes &payload) {
   if (payload.size() > config.max_frame_size) throw std::invalid_argument("payload excede o tamanho maximo");
   report("app-tx", payload);
-  
+
   // Aplica Hamming se configurado, caso contrário aplica o EDC tradicional (Paridade, Checksum ou CRC)
   bytes checked = config.check == CheckType::Hamming ? apply_hamming(payload) : add_check(payload);
   report("enlace-tx", checked);
-  
+
   bytes frame = apply_framing(checked);
   report("quadro-tx", frame);
   return frame;
@@ -406,8 +426,8 @@ DecodeResult LinkLayer::decode(const bytes &frame) {
   DecodeResult result;
   try {
     bytes checked = remove_framing(frame);
-    report("quadro-rx", checked);
-    
+    report("enlace-rx", checked);
+
     // Remove Hamming se configurado, caso contrário valida o EDC tradicional
     result = config.check == CheckType::Hamming ? remove_hamming(checked) : remove_check(checked);
     if (result.accepted) {
@@ -428,44 +448,65 @@ DecodeResult LinkLayer::decode(const bytes &frame) {
  * @brief Processa o fluxo contínuo de dados recebidos em pedaços (streaming / chunks),
  * identificando os limites dos quadros e acionando o callback quando um quadro estiver completo.
  */
-void LinkLayer::push(const bytes &chunk, const std::function<void(const DecodeResult &)> &callback) {
+void LinkLayer::push(
+    const bytes &chunk,
+    const std::function<void(const DecodeResult &)> &callback) {
+
+  auto report_frame = [*this](const std::byte value) {
+    bytes frame;
+    frame.push_back(value);
+    frame.insert(frame.begin() + 1, this->stream.begin(), this->stream.end());
+    frame.push_back(value);
+    report("quadro-rx", frame);
+  };
+
   // Tratamento para protocolos baseados em Flags (Byte Stuffing e Bit Stuffing)
-  if (config.framing == FramingType::ByteStuffing || config.framing == FramingType::BitStuffing) {
+  if (config.framing == FramingType::ByteStuffing ||
+      config.framing == FramingType::BitStuffing) {
     for (std::byte value : chunk) {
       uint8_t byte = std::to_integer<uint8_t>(value);
       if (config.framing == FramingType::ByteStuffing) {
         if (byte == FLAG) {
-          if (!stream.empty()) callback(decode(stream));
+          if (!stream.empty()) {
+            report_frame(value);
+            callback(decode(stream));
+          }
           stream.clear();
           escaping = false;
         } else if (escaping) {
           stream.push_back(std::byte{static_cast<uint8_t>(byte ^ ESC_MASK)});
           escaping = false;
-        } else if (byte == ESC) escaping = true;
-        else stream.push_back(value);
+        } else if (byte == ESC)
+          escaping = true;
+        else
+          stream.push_back(value);
       } else {
         if (byte == FLAG) {
-          if (!stream.empty()) callback(decode(stream));
+          if (!stream.empty()) {
+            report_frame(value);
+            callback(decode(stream));
+          }
           stream.clear();
-        } else stream.push_back(value);
+        } else
+          stream.push_back(value);
       }
     }
     return;
   }
-  
-  // Tratamento para protocolos baseados em Contagem de Caracteres e Entrelaçamento
+
+  // Tratamento para protocolos baseados em Contagem de Caracteres e
+  // Entrelaçamento
   stream.insert(stream.end(), chunk.begin(), chunk.end());
   if ((config.framing == FramingType::CharacterCount ||
-       config.framing == FramingType::BitInterleaving) && stream.size() >= 2) {
-    size_t size = (std::to_integer<uint8_t>(stream[0]) << 8) | std::to_integer<uint8_t>(stream[1]);
+       config.framing == FramingType::BitInterleaving) &&
+      stream.size() >= 2) {
+    size_t size = (std::to_integer<uint8_t>(stream[0]) << 8) |
+                  std::to_integer<uint8_t>(stream[1]);
     if (stream.size() >= size + 2) {
       bytes frame(stream.begin(), stream.begin() + size + 2);
       stream.erase(stream.begin(), stream.begin() + size + 2);
       callback(decode(frame));
     }
-  } else if (config.framing == FramingType::BitInterleaving && !stream.empty()) {
-    callback(decode(stream));
-    stream.clear();
   }
 }
 
