@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
 #include <sstream>
 #include <sys/types.h>
 #include <vector>
@@ -28,10 +29,25 @@ Modem::Modem(size_t symbol_size, size_t sample_size, double bitrate, double A)
       A(A) {
   baud = bitrate / (double)(symbol_size);
   k = sample_size * 10;
-  means = (double *)malloc(sizeof(double) * k);
+  means.assign(k, 0.);
+}
+
+Modem::Modem(const Modem &other)
+    : reset(other.reset), symbol_size(other.symbol_size),
+      sample_size(other.sample_size),
+      bitrate(other.bitrate), baud(other.baud), A(other.A),
+      dc_offset(other.dc_offset),
+      rx_bits(other.rx_bits), rx_acc(other.rx_acc), sig_buf(other.sig_buf),
+      k(other.k), means(other.means), running_sum(other.running_sum),
+      means_counter(other.means_counter), m0(other.m0) {}
+
+void Modem::request_reset() {
+  std::lock_guard<std::mutex> lock(state_mutex);
+  reset = true;
 }
 
 void Modem::toVolts(const bytes &data, bytes &volts) {
+  std::lock_guard<std::mutex> lock(state_mutex);
   bytes::const_iterator B;
   uint64_t acc = 0x0; // Acumulador de bits
   size_t bits = 0;    // Quantidade de bits para processamento
@@ -77,11 +93,12 @@ void Modem::toVolts(const bytes &data, bytes &volts) {
 }
 
 void Modem::fromVolts(const bytes &volts, bytes &data) {
+  std::lock_guard<std::mutex> lock(state_mutex);
   signal_sample sample;
   symbol s;
 
   // Quantidade mínima de double para processar sinal
-  static const size_t min_size = sample_size * sizeof(double);
+  const size_t min_size = sample_size * sizeof(double);
 
   // Reseta variáveis de controle do processamento
   if (reset) {

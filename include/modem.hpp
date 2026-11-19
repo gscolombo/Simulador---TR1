@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <memory>
 #include <numbers>
+#include <mutex>
 #include <sys/types.h>
 
 #define PI std::numbers::pi
@@ -35,6 +36,8 @@ public:
    * @param A Amplitude nominal do sinal elétrico.
    */
   Modem(size_t symbol_size, size_t sample_size, double bitrate, double A);
+  /** Cria uma cópia independente do estado do modem. */
+  Modem(const Modem &other);
   /** Destrutor virtual da interface de modem. */
   virtual ~Modem() = default;
 
@@ -48,6 +51,8 @@ public:
 
   /** Solicita a reinicialização do estado acumulado do receptor. */
   bool reset = true;
+  /** Solicita a reinicialização com acesso protegido a threads. */
+  void request_reset();
 
 protected:
   /** Quantidade de bits codificados em cada símbolo. */
@@ -91,9 +96,12 @@ private:
   /** Tamanho da janela usada na estimativa do deslocamento DC. */
   int k;
   /** Valores médios armazenados na janela de estimativa. */
-  double *means, running_sum = 0;
+  std::vector<double> means;
+  double running_sum = 0;
   /** Quantidade de médias atualmente preenchidas na janela. */
   int means_counter = 0, m0 = 0;
+  /** Protege o estado mutável usado por transmissão e recepção. */
+  mutable std::mutex state_mutex;
 };
 
 /** @brief Base para modems que transmitem diretamente em banda-base. */
@@ -142,6 +150,9 @@ class BipolarModem : public BasebandModem {
 public:
   /** Reutiliza o construtor do modem de banda-base. */
   using BasebandModem::BasebandModem;
+  /** Preserva os parâmetros e o estado alternado da polaridade. */
+  BipolarModem(const BipolarModem &other)
+      : BasebandModem(other), positive(other.positive) {}
 
   /** Cria uma cópia polimórfica do modem bipolar. */
   std::shared_ptr<Modem> clone() const override {
