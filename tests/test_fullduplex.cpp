@@ -3,21 +3,35 @@
 #include "modem.hpp"
 #include "transceiver.hpp"
 
+#include <mutex>
 #include <string>
 #include <thread>
 
 using namespace PhysicalLayer;
 
+namespace {
+std::mutex output_mutex;
+}
+
 void channel_thread(Channel *channel) {
 
   channel->open();
-  std::cout << "CH: Pronto\n";
+  {
+    std::lock_guard<std::mutex> lock(output_mutex);
+    std::cout << "CH: Pronto\n";
+  }
 
   channel->stream();
-  std::cout << "CH: Mensagem transmitida\n";
+  {
+    std::lock_guard<std::mutex> lock(output_mutex);
+    std::cout << "CH: Mensagem transmitida\n";
+  }
 
   channel->close();
-  std::cout << "CH: Saiu\n";
+  {
+    std::lock_guard<std::mutex> lock(output_mutex);
+    std::cout << "CH: Saiu\n";
+  }
 }
 
 TEST_CASE("Fluxo bidirecional e simultâneo de dados (full-duplex)") {
@@ -31,7 +45,10 @@ TEST_CASE("Fluxo bidirecional e simultâneo de dados (full-duplex)") {
   auto transceiver_node = [](std::string peer, Transceiver *trx,
                              const char *msg_out, const char *expected_in) {
     trx->connect();
-    std::cout << peer + std::string(" conectado\n");
+    {
+      std::lock_guard<std::mutex> lock(output_mutex);
+      std::cout << peer + std::string(" conectado\n");
+    }
 
     // Tarefa de transmissão
     auto tx_task = [&trx, &msg_out]() {

@@ -8,6 +8,7 @@
 #include "modem.hpp"
 #include "types.hpp"
 #include <deque>
+#include <mutex>
 #include <sys/types.h>
 #include <sys/un.h>
 
@@ -42,7 +43,7 @@ public:
   ssize_t receive();
 
   /** Reinicia o estado interno de recepção do modem. */
-  inline void reset_modem() { modem->reset = true; }
+  inline void reset_modem() { modem->request_reset(); }
 
   /** Encerra a conexão ao destruir o transceptor. */
   ~Transceiver();
@@ -52,6 +53,8 @@ private:
   int channel_sock;
   /** Modem responsável pela conversão entre bytes e sinais. */
   std::shared_ptr<Modem> modem;
+  /** Protege o descritor compartilhado pelas threads de TX e RX. */
+  std::mutex socket_mutex;
 };
 
 } // namespace PhysicalLayer

@@ -59,7 +59,7 @@ void tx(Transceiver *trx, LL::LinkLayer *link, const char *name) {
     send_message(message);
   }
 
-  trx->shutdown();
+  // O socket permanece aberto até tx_t e rx_t terminarem no main.
 }
 
 void rx(Transceiver *trx, LL::LinkLayer *link) {

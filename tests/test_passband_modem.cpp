@@ -329,7 +329,7 @@ TEST_CASE("PassbandModem::toVolts agrupa bits em símbolos e gera `sample_size` 
     for (PassbandModem *modem : modems) {
       auto roundtrip = [&modem](const bytes &original) {
         bytes volts, recovered;
-        modem->reset = true;
+        modem->request_reset();
         modem->toVolts(original, volts);
         modem->fromVolts(volts, recovered);
         CHECK(recovered == original);

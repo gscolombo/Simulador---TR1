@@ -16,6 +16,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <iostream>
+#include <mutex>
 #include <stdexcept>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -59,20 +60,25 @@ void Transceiver::connect() {
 }
 
 void Transceiver::shutdown() {
-  if (channel_sock < 0)
+  int fd;
+  {
+    std::lock_guard<std::mutex> lock(socket_mutex);
+    fd = channel_sock;
+    channel_sock = -1;
+  }
+
+  if (fd < 0)
     return;
 
   try {
     // Finaliza conexão com canal
-    int err = ::shutdown(channel_sock, SHUT_RDWR);
+    int err = ::shutdown(fd, SHUT_RDWR);
     if (err < 0 && errno != ENOTCONN)
       std::cerr << "Erro ao finalizar conexão com canal" << std::endl;
 
     // Encerra conexão com canal
-    check_err(close(channel_sock),
+    check_err(close(fd),
               "Erro ao fechar socket de entrada de canal.");
-
-    channel_sock = -1;
   } catch (std::runtime_error &e) {
     std::cout << e.what() << std::endl;
     exit(1);
@@ -83,14 +89,25 @@ void Transceiver::transmit(const bytes &message) {
   bytes signal;
   modem->toVolts(message, signal);
 
-  _send(channel_sock, signal);
+  int fd;
+  {
+    std::lock_guard<std::mutex> lock(socket_mutex);
+    fd = channel_sock;
+  }
+  _send(fd, signal);
 }
 
 ssize_t Transceiver::receive() {
   bytes data, buf;
   buf.resize(BUF_SIZE);
 
-  ssize_t N = recv(channel_sock, buf.data(), BUF_SIZE, 0);
+  int fd;
+  {
+    std::lock_guard<std::mutex> lock(socket_mutex);
+    fd = channel_sock;
+  }
+
+  ssize_t N = recv(fd, buf.data(), BUF_SIZE, 0);
   check_err(N, "Erro durante recepção de dados.");
   buf.resize(N);
 
