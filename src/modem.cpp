@@ -271,7 +271,7 @@ void BipolarModem::modulate(symbol &s, signal_sample &sample) const {
 
   positive ^= s[0]; // Alterna polaridade se bit = 1
   sample.insert(sample.end(), sample_size,
-                s[0] ? (positive ? 1.0 : -1.0) : 0.0);
+                s[0] ? (positive ? A : -A) : 0.0);
 }
 void BipolarModem::demodulate(signal_sample &sample, symbol &s) const {
   assert(sample.size() == sample_size);
