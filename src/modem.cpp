@@ -34,11 +34,10 @@ Modem::Modem(size_t symbol_size, size_t sample_size, double bitrate, double A)
 
 Modem::Modem(const Modem &other)
     : reset(other.reset), symbol_size(other.symbol_size),
-      sample_size(other.sample_size),
-      bitrate(other.bitrate), baud(other.baud), A(other.A),
-      dc_offset(other.dc_offset),
-      rx_bits(other.rx_bits), rx_acc(other.rx_acc), sig_buf(other.sig_buf),
-      k(other.k), means(other.means), running_sum(other.running_sum),
+      sample_size(other.sample_size), bitrate(other.bitrate), baud(other.baud),
+      A(other.A), dc_offset(other.dc_offset), rx_bits(other.rx_bits),
+      rx_acc(other.rx_acc), sig_buf(other.sig_buf), k(other.k),
+      means(other.means), running_sum(other.running_sum),
       means_counter(other.means_counter), m0(other.m0) {}
 
 void Modem::request_reset() {
@@ -61,10 +60,8 @@ void Modem::toVolts(const bytes &data, bytes &volts) {
     sample.clear();
 
     // Insere bits no vetor de símbolo (0s são incluídos se bits < symbol_size)
-    while (s.size() < this->symbol_size) {
-      s.push_back((bool)(acc & 1));
-      acc >>= 1; // Descarta bit do acumulador
-    }
+    for (size_t i = 0; i < this->symbol_size; i++)
+      s.push_back((bit)(acc >> (bits - 1 - i)) & 1);
 
     // Modula o símbolo
     this->modulate(s, sample);
@@ -81,15 +78,18 @@ void Modem::toVolts(const bytes &data, bytes &volts) {
 
   // Itera sobre o vetor de dados de entrada
   for (B = data.begin(); B != data.end(); B++) {
-    acc |= (u_int64_t)*B << bits; // Inclui byte no acumulador
+    acc = (acc << 8) | (u_int64_t)*B; // Inclui byte no acumulador
     bits += 8;
     while (bits >= symbol_size)
       process_bits();
   }
 
   // Processa bits restantes
-  if (bits > 0)
+  if (bits > 0) {
+    acc <<= symbol_size - bits;
+    bits = symbol_size;
     process_bits();
+  }
 }
 
 void Modem::fromVolts(const bytes &volts, bytes &data) {
@@ -108,7 +108,7 @@ void Modem::fromVolts(const bytes &volts, bytes &data) {
     reset = false;
   }
 
-  // Preenche buffer de sinal até atingir o nível mínimo
+  // Preenche buffer de sinal até atingir o tamanho mínimo
   sig_buf.insert(sig_buf.end(), volts.begin(), volts.end());
 
   if (sig_buf.size() < min_size)
@@ -131,19 +131,15 @@ void Modem::fromVolts(const bytes &volts, bytes &data) {
     demodulate(sample, s);
     assert(s.size() == symbol_size);
 
-    // ...e concatena o símbolo no acumulador
-    size_t i = 0;
-    while (i < symbol_size) {
-      rx_acc |= (uint64_t)s[i] << (rx_bits + i);
-      i++;
-    }
+    // ...e concatena o símbolo no acumulador (bit a bit)
+    for (size_t i = 0; i < symbol_size; i++)
+      rx_acc = (rx_acc << 1) | s[i];
 
     rx_bits += symbol_size;
 
     // Se 8 bits foram acumulados, insere no vetor de bytes de dados
     if (rx_bits >= 8) {
-      data.push_back((std::byte)(rx_acc & 0x00FF));
-      rx_acc >>= 8;
+      data.push_back((std::byte)((rx_acc >> (rx_bits - 8)) & 0x00FF));
       rx_bits -= 8;
     }
 
@@ -287,8 +283,7 @@ void BipolarModem::modulate(symbol &s, signal_sample &sample) const {
   assert(s[0] == 0 || s[0] == 1);
 
   positive ^= s[0]; // Alterna polaridade se bit = 1
-  sample.insert(sample.end(), sample_size,
-                s[0] ? (positive ? A : -A) : 0.0);
+  sample.insert(sample.end(), sample_size, s[0] ? (positive ? A : -A) : 0.0);
 }
 void BipolarModem::demodulate(signal_sample &sample, symbol &s) const {
   assert(sample.size() == sample_size);
